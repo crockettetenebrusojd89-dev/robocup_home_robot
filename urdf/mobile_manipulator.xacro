@@ -1,0 +1,177 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- Official Franka description-only macro.  gazebo=false intentionally avoids
+       legacy transmissions and all arm controllers in this integration stage. -->
+  <xacro:include filename="$(find franka_description)/robots/common/franka_robot.xacro"/>
+
+  <xacro:macro name="box_inertial" params="mass x y z">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (y * y + z * z) / 12.0}" ixy="0" ixz="0"
+        iyy="${mass * (x * x + z * z) / 12.0}" iyz="0"
+        izz="${mass * (x * x + y * y) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_inertial" params="mass radius length">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (3.0 * radius * radius + length * length) / 12.0}"
+        ixy="0" ixz="0"
+        iyy="${mass * (3.0 * radius * radius + length * length) / 12.0}"
+        iyz="0" izz="${mass * radius * radius / 2.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- A passive spring lock keeps the description-only arm at its upright
+       reference pose in Gazebo while retaining the official link masses and
+       gravity.  This is not an actuator or a ros2_control interface. -->
+  <xacro:macro name="passive_joint_lock" params="joint reference stiffness">
+    <gazebo reference="${joint}">
+      <implicitSpringDamper>true</implicitSpringDamper>
+      <springReference>${reference}</springReference>
+      <springStiffness>${stiffness}</springStiffness>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:macro name="mobile_manipulator_static">
+    <material name="shell_white">
+      <color rgba="0.88 0.90 0.94 1.0"/>
+    </material>
+    <material name="body_graphite">
+      <color rgba="0.12 0.15 0.20 1.0"/>
+    </material>
+    <material name="accent_blue">
+      <color rgba="0.08 0.42 0.82 1.0"/>
+    </material>
+
+    <!-- Low cover: kept inside the existing chassis and Nav2 footprint. -->
+    <link name="base_cover_link">
+      <xacro:box_inertial mass="0.8" x="0.48" y="0.38" z="0.05"/>
+      <visual>
+        <geometry><box size="0.48 0.38 0.05"/></geometry>
+        <material name="shell_white"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.48 0.38 0.05"/></geometry>
+      </collision>
+    </link>
+    <joint name="base_cover_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="base_cover_link"/>
+      <origin xyz="0 0 0.09" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Equipment body is aft of the lidar and raised above its z=0.13 scan
+         plane.  Its footprint remains fully inside the mobile base envelope. -->
+    <link name="upper_body_link">
+      <xacro:box_inertial mass="2.0" x="0.28" y="0.30" z="0.18"/>
+      <visual>
+        <geometry><box size="0.28 0.30 0.18"/></geometry>
+        <material name="body_graphite"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.28 0.30 0.18"/></geometry>
+      </collision>
+    </link>
+    <joint name="upper_body_joint" type="fixed">
+      <parent link="base_cover_link"/>
+      <child link="upper_body_link"/>
+      <origin xyz="-0.08 0 0.16" rpy="0 0 0"/>
+    </joint>
+
+    <link name="pedestal_link">
+      <xacro:cylinder_inertial mass="1.2" radius="0.09" length="0.10"/>
+      <visual>
+        <geometry><cylinder radius="0.09" length="0.10"/></geometry>
+        <material name="shell_white"/>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="0.09" length="0.10"/></geometry>
+      </collision>
+    </link>
+    <joint name="pedestal_joint" type="fixed">
+      <parent link="upper_body_link"/>
+      <child link="pedestal_link"/>
+      <origin xyz="0 0 0.14" rpy="0 0 0"/>
+    </joint>
+
+    <link name="arm_mount_link">
+      <xacro:box_inertial mass="0.8" x="0.20" y="0.20" z="0.04"/>
+      <visual>
+        <geometry><box size="0.20 0.20 0.04"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.20 0.20 0.04"/></geometry>
+      </collision>
+    </link>
+    <joint name="arm_mount_joint" type="fixed">
+      <parent link="pedestal_link"/>
+      <child link="arm_mount_link"/>
+      <origin xyz="0 0 0.07" rpy="0 0 0"/>
+    </joint>
+
+    <!-- The mast visually supports the already-validated camera pose.  The
+         camera remains attached to base_link, so its TF is unchanged. -->
+    <link name="camera_mast_link">
+      <xacro:cylinder_inertial mass="0.4" radius="0.02" length="0.55"/>
+      <visual>
+        <geometry><cylinder radius="0.02" length="0.55"/></geometry>
+        <material name="body_graphite"/>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="0.02" length="0.55"/></geometry>
+      </collision>
+    </link>
+    <joint name="camera_mast_joint" type="fixed">
+      <parent link="upper_body_link"/>
+      <child link="camera_mast_link"/>
+      <origin xyz="0.26 0 0.36" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Empty connected_to prevents the upstream macro from defining a second
+         copy of arm_mount_link.  The fixed mounting joint below is ours. -->
+    <xacro:franka_robot
+      robot_type="fr3"
+      hand="true"
+      ee_id="franka_hand"
+      rpy_ee="0 0 ${-pi / 4.0}"
+      gazebo="false"
+      with_sc="false"
+      no_prefix="false"
+      arm_prefix=""
+      description_pkg="franka_description"
+      connected_to=""/>
+
+    <joint name="arm_mount_to_fr3_joint" type="fixed">
+      <parent link="arm_mount_link"/>
+      <child link="fr3_link0"/>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Description-only passive holding at the compact upright reference. -->
+    <xacro:passive_joint_lock joint="fr3_joint1" reference="0.0" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint2" reference="0.0" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint3" reference="0.0" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint4" reference="-0.0698" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint5" reference="0.0" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint6" reference="0.0" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint7" reference="0.0" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_finger_joint1" reference="0.0" stiffness="800.0"/>
+    <xacro:passive_joint_lock joint="fr3_finger_joint2" reference="0.0" stiffness="800.0"/>
+
+    <!-- Publish actual Gazebo joint positions so robot_state_publisher exposes
+         the complete arm / hand TF chain without adding an arm controller. -->
+    <gazebo>
+      <plugin filename="ignition-gazebo-joint-state-publisher-system"
+              name="gz::sim::systems::JointStatePublisher">
+        <topic>/model/robocup_home_robot/joint_state</topic>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+</robot>

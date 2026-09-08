@@ -1,0 +1,16 @@
+viewpoints:
+  - name: viewpoint_1
+    x: -4.105
+    y: -1.208
+
+  - name: viewpoint_2
+    x: -0.718
+    y: -2.025
+
+  - name: viewpoint_3
+    x: -0.529
+    y: -0.702
+
+  - name: viewpoint_4
+    x: -4.304
+    y: -2.080
