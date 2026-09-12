@@ -33,6 +33,7 @@ from tf2_geometry_msgs import do_transform_point
 from tf2_ros import Buffer, TransformException, TransformListener
 from ultralytics import YOLO
 from visualization_msgs.msg import Marker, MarkerArray
+from vision_final_dedup import final_deduplicate_clusters
 
 
 DETECTION_LOG_PERIOD = 1.0
@@ -118,6 +119,7 @@ class RgbdObjectLocalizer(Node):
         self.declare_parameter('maximum_depth_m', 5.00)
         self.declare_parameter('tf_timeout_seconds', 0.10)
         self.declare_parameter('deduplication_radius', 0.05)
+        self.declare_parameter('final_deduplication_radius', 0.08)
         self.declare_parameter('min_confirmations', 3)
         self.declare_parameter('target_classes', ['apple', 'coke_can'])
         self.declare_parameter('group_number', -1)
@@ -170,6 +172,9 @@ class RgbdObjectLocalizer(Node):
         )
         self.deduplication_radius = float(
             self.get_parameter('deduplication_radius').value
+        )
+        self.final_deduplication_radius = float(
+            self.get_parameter('final_deduplication_radius').value
         )
         self.min_confirmations = int(
             self.get_parameter('min_confirmations').value
@@ -240,6 +245,8 @@ class RgbdObjectLocalizer(Node):
         self._inference_disabled = False
         self._clusters = []
         self._next_cluster_id = 0
+        self._cluster_lineages = {}
+        self._same_frame_separate_pairs = set()
         self.save_answer_service = self.create_service(
             Trigger,
             '/vision/save_answer',
@@ -258,6 +265,8 @@ class RgbdObjectLocalizer(Node):
             f'markers={self.marker_topic}; '
             f'deduplicated_markers={self.deduplicated_marker_topic}; '
             f'deduplication_radius={self.deduplication_radius:.3f}m; '
+            f'final_deduplication_radius='
+            f'{self.final_deduplication_radius:.3f}m; '
             f'min_confirmations={self.min_confirmations}; '
             f'target_classes={list(self.target_classes)}; '
             f'group_number={self.group_number}; '
@@ -290,6 +299,10 @@ class RgbdObjectLocalizer(Node):
             raise RuntimeError('tf_timeout_seconds cannot be negative.')
         if self.deduplication_radius <= 0.0:
             raise RuntimeError('deduplication_radius must be greater than zero.')
+        if self.final_deduplication_radius <= 0.0:
+            raise RuntimeError(
+                'final_deduplication_radius must be greater than zero.'
+            )
         if self.min_confirmations < 1:
             raise RuntimeError('min_confirmations must be at least one.')
 
@@ -552,6 +565,7 @@ class RgbdObjectLocalizer(Node):
 
     def _update_clusters(self, localizations, stamp):
         seen_time = stamp.sec + stamp.nanosec * 1e-9
+        associated_clusters = []
         for localized in localizations:
             point = localized['map'].point
             cluster = self._matching_cluster(localized)
@@ -567,6 +581,9 @@ class RgbdObjectLocalizer(Node):
                     mean_confidence=localized['confidence'],
                 )
                 self._clusters.append(cluster)
+                self._cluster_lineages[cluster.cluster_id] = frozenset(
+                    (cluster.cluster_id,)
+                )
                 self._next_cluster_id += 1
             else:
                 cluster.add_observation(
@@ -576,7 +593,35 @@ class RgbdObjectLocalizer(Node):
                     localized['confidence'],
                     seen_time,
                 )
+            associated_clusters.append(cluster)
+        self._record_same_frame_separate_pairs(associated_clusters)
         self._consolidate_clusters()
+
+    def _record_same_frame_separate_pairs(self, associated_clusters):
+        """Remember same-class detections that remained separate this frame."""
+        for first_index, first in enumerate(associated_clusters):
+            for second in associated_clusters[first_index + 1:]:
+                if first.class_name != second.class_name:
+                    continue
+                if first.cluster_id == second.cluster_id:
+                    continue
+                self._same_frame_separate_pairs.add(
+                    frozenset((first.cluster_id, second.cluster_id))
+                )
+
+    def _merge_cluster_lineages(self, retained_cluster_id, removed_cluster_id):
+        """Keep historical pair evidence valid after online consolidation."""
+        retained_lineage = self._cluster_lineages.get(
+            retained_cluster_id,
+            frozenset((retained_cluster_id,)),
+        )
+        removed_lineage = self._cluster_lineages.pop(
+            removed_cluster_id,
+            frozenset((removed_cluster_id,)),
+        )
+        self._cluster_lineages[retained_cluster_id] = (
+            retained_lineage | removed_lineage
+        )
 
     def _consolidate_clusters(self):
         """Merge overlapping same-class clusters until none remain."""
@@ -598,6 +643,10 @@ class RgbdObjectLocalizer(Node):
                         key=lambda cluster: cluster.cluster_id,
                     )
                     retained.merge_from(removed)
+                    self._merge_cluster_lineages(
+                        retained.cluster_id,
+                        removed.cluster_id,
+                    )
                     self._clusters.remove(removed)
                     self.get_logger().info(
                         f'Merged {retained.class_name} cluster '
@@ -708,17 +757,35 @@ class RgbdObjectLocalizer(Node):
             raise ValueError('target_classes must not contain duplicates.')
 
         objects = {class_name: [] for class_name in self.target_classes}
-        for cluster in self._clusters:
-            if cluster.class_name not in objects:
-                continue
-            if cluster.observation_count < self.min_confirmations:
-                continue
+        confirmed_clusters = [
+            cluster
+            for cluster in self._clusters
+            if (
+                cluster.class_name in objects
+                and cluster.observation_count >= self.min_confirmations
+            )
+        ]
+        final_clusters, final_merges = final_deduplicate_clusters(
+            confirmed_clusters,
+            self.final_deduplication_radius,
+            self._same_frame_separate_pairs,
+            self._cluster_lineages,
+        )
+        for merge in final_merges:
+            self.get_logger().info(
+                f'Final dedup merged {merge.class_name} clusters '
+                f'{merge.first_cluster_ids} and {merge.second_cluster_ids}; '
+                f'distance={merge.distance:.3f} m; '
+                f'observations={merge.first_observations}+'
+                f'{merge.second_observations}'
+            )
+        for cluster in final_clusters:
             x = float(cluster.x)
             y = float(cluster.y)
             if not math.isfinite(x) or not math.isfinite(y):
                 raise ValueError(
-                    f'Confirmed {cluster.class_name} cluster '
-                    f'#{cluster.cluster_id} has non-finite x/y.'
+                    f'Final {cluster.class_name} cluster '
+                    f'{cluster.source_cluster_ids} has non-finite x/y.'
                 )
             objects[cluster.class_name].append({'x': x, 'y': y})
 

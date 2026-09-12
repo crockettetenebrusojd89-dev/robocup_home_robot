@@ -75,12 +75,18 @@ install(
 )
 
 install(
+  FILES scripts/vision_final_dedup.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
   PROGRAMS scripts/offset_joint_states.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME offset_joint_states
 )
 
 if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
@@ -90,6 +96,16 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+  add_test(
+    NAME vision_final_dedup
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_vision_final_dedup.py
+  )
+  set_tests_properties(
+    vision_final_dedup
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+  )
 endif()
 
 ament_package()
