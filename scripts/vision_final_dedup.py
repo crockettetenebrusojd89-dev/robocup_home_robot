@@ -156,3 +156,19 @@ def final_deduplicate_clusters(
         cluster.source_cluster_ids,
     ))
     return results, merges
+
+
+def partition_by_minimum_observations(clusters, minimum_observations):
+    """Split final clusters by aggregate evidence after final deduplication."""
+    if minimum_observations < 1:
+        raise ValueError('minimum_observations must be at least one.')
+    accepted = []
+    suppressed = []
+    for cluster in clusters:
+        destination = (
+            accepted
+            if cluster.observation_count >= minimum_observations
+            else suppressed
+        )
+        destination.append(cluster)
+    return accepted, suppressed

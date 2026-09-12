@@ -121,6 +121,15 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /local_plan
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Final Object Answers
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vision/final_object_markers
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

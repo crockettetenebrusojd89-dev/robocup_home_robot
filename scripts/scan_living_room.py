@@ -11,9 +11,12 @@ from rclpy.duration import Duration
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from std_srvs.srv import Trigger
 
 
 ACTION_SERVER = '/spin'
+RESET_TRACKING_SERVICE = '/vision/reset_tracking'
+SERVICE_WAIT_ATTEMPTS = 30
 
 
 class ScanLivingRoom(Node):
@@ -24,8 +27,8 @@ class ScanLivingRoom(Node):
             'scan_living_room',
             parameter_overrides=[Parameter('use_sim_time', value=True)],
         )
-        self.declare_parameter('scan_steps', 6)
-        self.declare_parameter('spin_angle', 1.0471975512)
+        self.declare_parameter('scan_steps', 12)
+        self.declare_parameter('spin_angle', 0.5235987756)
         self.declare_parameter('dwell_seconds', 2.0)
         self.declare_parameter('spin_time_allowance', 15.0)
 
@@ -37,6 +40,10 @@ class ScanLivingRoom(Node):
         )
         self._validate_parameters()
         self._action_client = ActionClient(self, Spin, ACTION_SERVER)
+        self._reset_tracking_client = self.create_client(
+            Trigger,
+            RESET_TRACKING_SERVICE,
+        )
 
     def _validate_parameters(self):
         if self.scan_steps < 1:
@@ -102,6 +109,46 @@ class ScanLivingRoom(Node):
             return None, 1
         return wrapped_result, 0
 
+    def _reset_visual_tracking(self):
+        self.get_logger().info(
+            f'Waiting for {RESET_TRACKING_SERVICE} before scanning...'
+        )
+        for attempt in range(1, SERVICE_WAIT_ATTEMPTS + 1):
+            if self._reset_tracking_client.wait_for_service(timeout_sec=1.0):
+                break
+            if attempt % 5 == 0:
+                self.get_logger().info(
+                    f'Still waiting for {RESET_TRACKING_SERVICE}...'
+                )
+            if not rclpy.ok():
+                return False
+        else:
+            self.get_logger().error(
+                f'{RESET_TRACKING_SERVICE} was unavailable after '
+                f'{SERVICE_WAIT_ATTEMPTS} seconds.'
+            )
+            return False
+
+        future = self._reset_tracking_client.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(self, future)
+        if not future.done():
+            self.get_logger().error('Stopped before visual tracking was reset.')
+            return False
+        if future.exception() is not None:
+            self.get_logger().error(
+                f'Visual tracking reset failed: {future.exception()}'
+            )
+            return False
+        response = future.result()
+        if response is None or not response.success:
+            message = response.message if response is not None else 'no response'
+            self.get_logger().error(
+                f'Visual tracking reset was rejected: {message}'
+            )
+            return False
+        self.get_logger().info(response.message)
+        return True
+
     def _dwell_using_ros_time(self):
         if self.dwell_seconds == 0.0:
             return True
@@ -130,6 +177,8 @@ class ScanLivingRoom(Node):
             self.get_logger().error(
                 'ROS shutdown before the Nav2 Spin action server became ready.'
             )
+            return 1
+        if not self._reset_visual_tracking():
             return 1
 
         self.get_logger().info('Living room scan starting.')

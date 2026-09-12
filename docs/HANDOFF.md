@@ -93,3 +93,28 @@ and relays offset FR3 joint states for the robot-state-publisher TF chain.
   final TP / FP performance or competition scoring accuracy.
 - RViz GUI markers were not manually inspected, although the marker topic was
   verified at the ROS-message level.
+
+## Vision scoring-window hardening
+
+- Feature branch: `work/vision-observation-window`.
+- The latest pre-change real answer, group 100, scored 6/20 with the official
+  scorer at an explicit 0.10 m threshold: apple TP=2 FP=3 and coke_can TP=1
+  FP=4. Runtime logs showed those extra clusters were accumulated before the
+  formal room scan, mainly while navigating.
+- `scan_living_room` now requires `/vision/reset_tracking` and clears all live
+  clusters, lineages, and same-frame protection state immediately before the
+  scoring scan. It fails closed if the service cannot be called.
+- The default full-circle scan now uses twelve 30-degree steps instead of six
+  60-degree steps. A direct comparison found all three targets with the denser
+  angular coverage after the six-step scan missed the distant apple.
+- Online confirmation stays at three observations so a sparse distant target
+  can trigger reinspection. Final output requires five aggregate observations
+  after final deduplication, suppressing a four-observation transient that
+  produced one verified FP in group 102.
+- `/vision/final_object_markers` publishes the exact JSON snapshot as persistent
+  transient-local markers after a successful save. RViz subscribes to this
+  topic, so displayed final answers no longer disagree with output-only dedup.
+- Group 101 scored 20/20 after the scan-window reset. Group 102 exposed the
+  low-evidence reinspection FP and scored 18/20. The final group 103 flow used
+  the denser scan and evidence filter and scored 20/20 at an explicit 0.10 m
+  threshold, with three TPs, no FPs, and no FNs.

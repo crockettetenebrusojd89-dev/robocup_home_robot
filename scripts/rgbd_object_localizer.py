@@ -34,6 +34,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from ultralytics import YOLO
 from visualization_msgs.msg import Marker, MarkerArray
 from vision_final_dedup import final_deduplicate_clusters
+from vision_final_dedup import partition_by_minimum_observations
 
 
 DETECTION_LOG_PERIOD = 1.0
@@ -108,6 +109,11 @@ class RgbdObjectLocalizer(Node):
             'deduplicated_marker_topic',
             '/vision/deduplicated_object_markers',
         )
+        self.declare_parameter(
+            'final_marker_topic',
+            '/vision/final_object_markers',
+        )
+        self.declare_parameter('final_marker_z', 0.75)
         self.declare_parameter('target_frame', 'map')
         self.declare_parameter('device', 'cpu')
         self.declare_parameter('max_inference_hz', 5.0)
@@ -121,6 +127,7 @@ class RgbdObjectLocalizer(Node):
         self.declare_parameter('deduplication_radius', 0.05)
         self.declare_parameter('final_deduplication_radius', 0.08)
         self.declare_parameter('min_confirmations', 3)
+        self.declare_parameter('final_min_confirmations', 5)
         self.declare_parameter('target_classes', ['apple', 'coke_can'])
         self.declare_parameter('group_number', -1)
         self.declare_parameter(
@@ -143,6 +150,12 @@ class RgbdObjectLocalizer(Node):
         self.marker_topic = str(self.get_parameter('marker_topic').value)
         self.deduplicated_marker_topic = str(
             self.get_parameter('deduplicated_marker_topic').value
+        )
+        self.final_marker_topic = str(
+            self.get_parameter('final_marker_topic').value
+        )
+        self.final_marker_z = float(
+            self.get_parameter('final_marker_z').value
         )
         self.target_frame = str(self.get_parameter('target_frame').value)
         self.device = str(self.get_parameter('device').value)
@@ -179,6 +192,9 @@ class RgbdObjectLocalizer(Node):
         self.min_confirmations = int(
             self.get_parameter('min_confirmations').value
         )
+        self.final_min_confirmations = int(
+            self.get_parameter('final_min_confirmations').value
+        )
         self.target_classes = tuple(
             str(class_name)
             for class_name in self.get_parameter('target_classes').value
@@ -214,6 +230,17 @@ class RgbdObjectLocalizer(Node):
         )
         self.deduplicated_marker_publisher = self.create_publisher(
             MarkerArray, self.deduplicated_marker_topic, 10
+        )
+        final_marker_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.final_marker_publisher = self.create_publisher(
+            MarkerArray,
+            self.final_marker_topic,
+            final_marker_qos,
         )
         self.camera_info_subscription = self.create_subscription(
             CameraInfo,
@@ -252,6 +279,11 @@ class RgbdObjectLocalizer(Node):
             '/vision/save_answer',
             self._save_answer_callback,
         )
+        self.reset_tracking_service = self.create_service(
+            Trigger,
+            '/vision/reset_tracking',
+            self._reset_tracking_callback,
+        )
         self.get_clusters_service = self.create_service(
             Trigger,
             '/vision/get_clusters',
@@ -264,14 +296,17 @@ class RgbdObjectLocalizer(Node):
             f'CameraInfo={self.camera_info_topic}; target={self.target_frame}; '
             f'markers={self.marker_topic}; '
             f'deduplicated_markers={self.deduplicated_marker_topic}; '
+            f'final_markers={self.final_marker_topic}; '
             f'deduplication_radius={self.deduplication_radius:.3f}m; '
             f'final_deduplication_radius='
             f'{self.final_deduplication_radius:.3f}m; '
             f'min_confirmations={self.min_confirmations}; '
+            f'final_min_confirmations={self.final_min_confirmations}; '
             f'target_classes={list(self.target_classes)}; '
             f'group_number={self.group_number}; '
             f'answer_output_dir={self.answer_output_dir}; '
             'save_service=/vision/save_answer; '
+            'reset_service=/vision/reset_tracking; '
             'cluster_service=/vision/get_clusters'
         )
 
@@ -297,6 +332,8 @@ class RgbdObjectLocalizer(Node):
             raise RuntimeError('invalid minimum/maximum depth range.')
         if self.tf_timeout_seconds < 0.0:
             raise RuntimeError('tf_timeout_seconds cannot be negative.')
+        if not math.isfinite(self.final_marker_z):
+            raise RuntimeError('final_marker_z must be finite.')
         if self.deduplication_radius <= 0.0:
             raise RuntimeError('deduplication_radius must be greater than zero.')
         if self.final_deduplication_radius <= 0.0:
@@ -305,6 +342,10 @@ class RgbdObjectLocalizer(Node):
             )
         if self.min_confirmations < 1:
             raise RuntimeError('min_confirmations must be at least one.')
+        if self.final_min_confirmations < self.min_confirmations:
+            raise RuntimeError(
+                'final_min_confirmations must be at least min_confirmations.'
+            )
 
     def _warn_throttled(self, key, message):
         now = time.monotonic()
@@ -779,7 +820,22 @@ class RgbdObjectLocalizer(Node):
                 f'observations={merge.first_observations}+'
                 f'{merge.second_observations}'
             )
-        for cluster in final_clusters:
+        output_clusters, suppressed_clusters = (
+            partition_by_minimum_observations(
+                final_clusters,
+                self.final_min_confirmations,
+            )
+        )
+        for cluster in suppressed_clusters:
+            self.get_logger().info(
+                f'Final output suppressed low-evidence '
+                f'{cluster.class_name} cluster '
+                f'{cluster.source_cluster_ids}; '
+                f'observations={cluster.observation_count} < '
+                f'{self.final_min_confirmations}'
+            )
+
+        for cluster in output_clusters:
             x = float(cluster.x)
             y = float(cluster.y)
             if not math.isfinite(x) or not math.isfinite(y):
@@ -833,6 +889,61 @@ class RgbdObjectLocalizer(Node):
             temporary_path.unlink(missing_ok=True)
         return output_path
 
+    def _make_final_answer_markers(self, snapshot, stamp):
+        """Render the exact saved x/y snapshot as persistent RViz markers."""
+        messages = []
+        delete_all = Marker()
+        delete_all.action = Marker.DELETEALL
+        messages.append(delete_all)
+
+        marker_id = 0
+        for class_name in self.target_classes:
+            color = (
+                (0.2, 1.0, 0.2)
+                if class_name == 'apple'
+                else (1.0, 0.2, 0.1)
+            )
+            for class_index, point in enumerate(snapshot['objects'][class_name], 1):
+                shape = Marker()
+                shape.header.frame_id = self.target_frame
+                shape.header.stamp = stamp
+                shape.ns = 'final_objects'
+                shape.id = marker_id
+                marker_id += 1
+                shape.type = Marker.SPHERE
+                shape.action = Marker.ADD
+                shape.pose.position.x = point['x']
+                shape.pose.position.y = point['y']
+                shape.pose.position.z = self.final_marker_z
+                shape.pose.orientation.w = 1.0
+                shape.scale.x = 0.10
+                shape.scale.y = 0.10
+                shape.scale.z = 0.10
+                shape.color.r, shape.color.g, shape.color.b = color
+                shape.color.a = 1.0
+                messages.append(shape)
+
+                label = Marker()
+                label.header.frame_id = self.target_frame
+                label.header.stamp = stamp
+                label.ns = 'final_object_labels'
+                label.id = marker_id
+                marker_id += 1
+                label.type = Marker.TEXT_VIEW_FACING
+                label.action = Marker.ADD
+                label.pose.position.x = point['x']
+                label.pose.position.y = point['y']
+                label.pose.position.z = self.final_marker_z + 0.12
+                label.pose.orientation.w = 1.0
+                label.scale.z = 0.10
+                label.color.r = 1.0
+                label.color.g = 1.0
+                label.color.b = 1.0
+                label.color.a = 1.0
+                label.text = f'{class_name} {class_index}'
+                messages.append(label)
+        return MarkerArray(markers=messages)
+
     def _save_answer_callback(self, request, response):
         del request
         try:
@@ -851,6 +962,26 @@ class RgbdObjectLocalizer(Node):
 
         response.success = True
         response.message = f'Answer saved: {output_path}'
+        self.final_marker_publisher.publish(
+            self._make_final_answer_markers(
+                snapshot,
+                self.get_clock().now().to_msg(),
+            )
+        )
+        self.get_logger().info(response.message)
+        return response
+
+    def _reset_tracking_callback(self, request, response):
+        """Start a fresh scoring observation window without restarting YOLO."""
+        del request
+        removed_count = len(self._clusters)
+        self._clusters.clear()
+        self._next_cluster_id = 0
+        self._cluster_lineages.clear()
+        self._same_frame_separate_pairs.clear()
+        self._last_cluster_log = None
+        response.success = True
+        response.message = f'Reset visual tracking; removed {removed_count} clusters.'
         self.get_logger().info(response.message)
         return response
 

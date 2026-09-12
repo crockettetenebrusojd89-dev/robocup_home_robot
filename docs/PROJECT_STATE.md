@@ -24,24 +24,32 @@ test, and work that remains unverified.
   living room has previously succeeded.
 - Navigation around temporary obstacles has previously been verified.
 
-## Vision — V2 runtime-verified chain (not scoring-verified)
+## Vision — official-scorer and runtime verified
 
 - The YOLO pilot detects `apple` and `coke_can`.
 - RGB-D back-projection and TF2 transformation produce object locations in
   `/map`.
 - Per-class spatial clustering, deduplication, and counting are implemented.
 - RViz markers and the answer-JSON generation main chain are present.
-- Vision Final Dedup V2 code and deterministic tests passed, and the real
-  Gazebo + YOLO + RGB-D + TF2 chain was exercised successfully.
-- The documented `go_to_living_room`, six-step `scan_living_room`, and
-  `reinspect_far_object` flows succeeded in that runtime session.
+- Vision Final Dedup V2 and final-evidence filtering have deterministic test
+  coverage, and the real Gazebo + YOLO + RGB-D + TF2 chain was exercised.
+- `scan_living_room` opens a fresh scoring observation window through
+  `/vision/reset_tracking`, excluding detections collected at startup and while
+  navigating to the room.
+- The default scan uses twelve 30-degree steps with a two-second dwell. This
+  keeps one full revolution while adding angular overlap for distant targets.
 - Online tracking retained `deduplication_radius=0.05 m`; output-only final
   deduplication used `final_deduplication_radius=0.08 m`.
-- Confirmed apple clusters `#26` and `#31` were 0.062 m apart at answer save.
-  They were merged into one observation-count-weighted final answer location
-  with observations `3 + 98`, without modifying live tracking clusters.
+- Final output requires five aggregate observations after final deduplication;
+  the three-observation online threshold remains available to far-object
+  reinspection.
 - `/vision/save_answer` successfully produced a valid JSON with finite
-  coordinates, and the deduplicated-marker topic published during the run.
+  coordinates. `/vision/final_object_markers` publishes the exact saved
+  snapshot with transient-local durability, and RViz is configured to show it.
+- Group 103 completed navigation, scan, far-object reinspection, answer save,
+  and official scoring. With the scorer explicitly set to a strict 0.10 m
+  match threshold, it scored 20/20: apple TP=2 FP=0 FN=0 and coke_can TP=1
+  FP=0 FN=0. Match distances were 0.0746 m, 0.0235 m, and 0.0160 m.
 
 ## FR3 V2 static integration — verified in commit `cf93726`
 
@@ -67,10 +75,11 @@ establish arm control, MoveIt2 planning, or visual grasping.
 - Same-frame protection in Gazebo when two real same-class objects are
   simultaneously visible and closer than 8 cm.
 - Calibration of the 8 cm final-dedup radius against official competition
-  object spacing.
-- TP / FP and competition scoring accuracy. This runtime verification used no
-  Gazebo object ground truth.
-- Manual RViz GUI inspection of the final deduplicated markers.
+  object spacing and randomized layouts beyond the provided scoring example.
+- Repeat trials with randomized object placement and temporary obstacles.
+- Direct corner-based validation of map/world calibration modes C0-C3.
+- Manual RViz GUI inspection of the final-answer markers. Their ROS messages
+  and exact equality with the saved JSON were verified.
 
 ## Current priority
 

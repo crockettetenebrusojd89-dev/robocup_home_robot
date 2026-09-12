@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import unittest
 
 from vision_final_dedup import final_deduplicate_clusters
+from vision_final_dedup import partition_by_minimum_observations
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,26 @@ class TestFinalDeduplication(unittest.TestCase):
         self.assertEqual(results[0].source_cluster_ids, (0,))
         self.assertEqual(results[0].observation_count, 3)
         self.assertEqual(merges, [])
+
+    def test_final_evidence_threshold_uses_merged_observation_total(self):
+        clusters = [
+            Cluster(0, 'apple', -3.423, -3.337, observation_count=3),
+            Cluster(1, 'apple', -3.493, -3.338, observation_count=2),
+            Cluster(2, 'apple', -3.603, -3.376, observation_count=4),
+        ]
+
+        results, _merges = self._run(clusters)
+        accepted, suppressed = partition_by_minimum_observations(results, 5)
+
+        self.assertEqual(len(accepted), 1)
+        self.assertEqual(accepted[0].source_cluster_ids, (0, 1))
+        self.assertEqual(accepted[0].observation_count, 5)
+        self.assertEqual(len(suppressed), 1)
+        self.assertEqual(suppressed[0].source_cluster_ids, (2,))
+
+    def test_final_evidence_threshold_rejects_invalid_value(self):
+        with self.assertRaisesRegex(ValueError, 'at least one'):
+            partition_by_minimum_observations([], 0)
 
 
 if __name__ == '__main__':
