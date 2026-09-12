@@ -27,9 +27,10 @@
     </inertial>
   </xacro:macro>
 
-  <!-- A passive spring lock keeps the description-only arm at its upright
-       reference pose in Gazebo while retaining the official link masses and
-       gravity.  This is not an actuator or a ros2_control interface. -->
+  <!-- A passive spring lock keeps the description-only arm at its navigation
+       stowed reference in Gazebo while retaining the official link masses and
+       gravity.  This is only a static preview aid, not an actuator or a
+       ros2_control interface. -->
   <xacro:macro name="passive_joint_lock" params="joint reference stiffness">
     <gazebo reference="${joint}">
       <implicitSpringDamper>true</implicitSpringDamper>
@@ -49,15 +50,27 @@
       <color rgba="0.08 0.42 0.82 1.0"/>
     </material>
 
-    <!-- Low cover: kept inside the existing chassis and Nav2 footprint. -->
+    <!-- V2 low cover: layered visuals conceal the test-platform look while the
+         single collision remains inside the existing chassis footprint. -->
     <link name="base_cover_link">
-      <xacro:box_inertial mass="0.8" x="0.48" y="0.38" z="0.05"/>
+      <xacro:box_inertial mass="0.7" x="0.48" y="0.38" z="0.04"/>
       <visual>
-        <geometry><box size="0.48 0.38 0.05"/></geometry>
+        <origin xyz="0 0 0.0025" rpy="0 0 0"/>
+        <geometry><box size="0.48 0.38 0.035"/></geometry>
         <material name="shell_white"/>
       </visual>
+      <visual>
+        <origin xyz="0 0 -0.0175" rpy="0 0 0"/>
+        <geometry><box size="0.45 0.35 0.015"/></geometry>
+        <material name="body_graphite"/>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.025" rpy="0 0 0"/>
+        <geometry><box size="0.34 0.28 0.01"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
       <collision>
-        <geometry><box size="0.48 0.38 0.05"/></geometry>
+        <geometry><box size="0.48 0.38 0.04"/></geometry>
       </collision>
     </link>
     <joint name="base_cover_joint" type="fixed">
@@ -66,72 +79,156 @@
       <origin xyz="0 0 0.09" rpy="0 0 0"/>
     </joint>
 
-    <!-- Equipment body is aft of the lidar and raised above its z=0.13 scan
-         plane.  Its footprint remains fully inside the mobile base envelope. -->
+    <!-- The equipment bay remains aft of the lidar scan origin.  A narrow
+         shoulder stage creates a gradual body-to-arm transition. -->
     <link name="upper_body_link">
-      <xacro:box_inertial mass="2.0" x="0.28" y="0.30" z="0.18"/>
+      <xacro:box_inertial mass="1.8" x="0.30" y="0.30" z="0.14"/>
       <visual>
-        <geometry><box size="0.28 0.30 0.18"/></geometry>
+        <origin xyz="0 0 -0.01" rpy="0 0 0"/>
+        <geometry><box size="0.30 0.30 0.12"/></geometry>
         <material name="body_graphite"/>
       </visual>
+      <visual>
+        <origin xyz="0 0.151 -0.005" rpy="0 0 0"/>
+        <geometry><box size="0.24 0.012 0.11"/></geometry>
+        <material name="shell_white"/>
+      </visual>
+      <visual>
+        <origin xyz="0 -0.151 -0.005" rpy="0 0 0"/>
+        <geometry><box size="0.24 0.012 0.11"/></geometry>
+        <material name="shell_white"/>
+      </visual>
+      <visual>
+        <origin xyz="0.151 0 -0.005" rpy="0 0 0"/>
+        <geometry><box size="0.012 0.20 0.09"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.055" rpy="0 0 0"/>
+        <geometry><box size="0.28 0.28 0.03"/></geometry>
+        <material name="shell_white"/>
+      </visual>
       <collision>
-        <geometry><box size="0.28 0.30 0.18"/></geometry>
+        <geometry><box size="0.30 0.30 0.14"/></geometry>
       </collision>
     </link>
     <joint name="upper_body_joint" type="fixed">
       <parent link="base_cover_link"/>
       <child link="upper_body_link"/>
-      <origin xyz="-0.08 0 0.16" rpy="0 0 0"/>
+      <origin xyz="-0.09 0 0.135" rpy="0 0 0"/>
     </joint>
 
-    <link name="pedestal_link">
-      <xacro:cylinder_inertial mass="1.2" radius="0.09" length="0.10"/>
+    <link name="shoulder_link">
+      <xacro:box_inertial mass="0.7" x="0.24" y="0.26" z="0.07"/>
       <visual>
-        <geometry><cylinder radius="0.09" length="0.10"/></geometry>
+        <geometry><box size="0.24 0.26 0.055"/></geometry>
         <material name="shell_white"/>
       </visual>
-      <collision>
-        <geometry><cylinder radius="0.09" length="0.10"/></geometry>
-      </collision>
-    </link>
-    <joint name="pedestal_joint" type="fixed">
-      <parent link="upper_body_link"/>
-      <child link="pedestal_link"/>
-      <origin xyz="0 0 0.14" rpy="0 0 0"/>
-    </joint>
-
-    <link name="arm_mount_link">
-      <xacro:box_inertial mass="0.8" x="0.20" y="0.20" z="0.04"/>
       <visual>
-        <geometry><box size="0.20 0.20 0.04"/></geometry>
+        <origin xyz="0 0 0.035" rpy="0 0 0"/>
+        <geometry><box size="0.18 0.20 0.018"/></geometry>
         <material name="accent_blue"/>
       </visual>
       <collision>
-        <geometry><box size="0.20 0.20 0.04"/></geometry>
+        <geometry><box size="0.24 0.26 0.07"/></geometry>
+      </collision>
+    </link>
+    <joint name="shoulder_joint" type="fixed">
+      <parent link="upper_body_link"/>
+      <child link="shoulder_link"/>
+      <origin xyz="0 0 0.105" rpy="0 0 0"/>
+    </joint>
+
+    <link name="pedestal_link">
+      <xacro:cylinder_inertial mass="0.8" radius="0.085" length="0.04"/>
+      <visual>
+        <geometry><cylinder radius="0.085" length="0.035"/></geometry>
+        <material name="body_graphite"/>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.018" rpy="0 0 0"/>
+        <geometry><cylinder radius="0.088" length="0.008"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="0.085" length="0.04"/></geometry>
+      </collision>
+    </link>
+    <joint name="pedestal_joint" type="fixed">
+      <parent link="shoulder_link"/>
+      <child link="pedestal_link"/>
+      <origin xyz="0 0 0.055" rpy="0 0 0"/>
+    </joint>
+
+    <link name="arm_mount_link">
+      <xacro:cylinder_inertial mass="0.6" radius="0.11" length="0.02"/>
+      <visual>
+        <geometry><cylinder radius="0.11" length="0.02"/></geometry>
+        <material name="shell_white"/>
+      </visual>
+      <visual>
+        <geometry><cylinder radius="0.085" length="0.022"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="0.11" length="0.02"/></geometry>
       </collision>
     </link>
     <joint name="arm_mount_joint" type="fixed">
       <parent link="pedestal_link"/>
       <child link="arm_mount_link"/>
-      <origin xyz="0 0 0.07" rpy="0 0 0"/>
+      <!-- The compact arm folds toward -Y.  A small 55 mm counter-offset keeps
+           the complete stowed assembly's lateral COM near the chassis center. -->
+      <origin xyz="0 0.055 0.03" rpy="0 0 0"/>
     </joint>
 
-    <!-- The mast visually supports the already-validated camera pose.  The
-         camera remains attached to base_link, so its TF is unchanged. -->
+    <!-- Enclosed V2 sensor mast and rear camera housing.  The real camera is
+         still attached to base_link, so camera_link and optical TF stay frozen. -->
     <link name="camera_mast_link">
-      <xacro:cylinder_inertial mass="0.4" radius="0.02" length="0.55"/>
+      <xacro:box_inertial mass="0.45" x="0.055" y="0.085" z="0.47"/>
       <visual>
-        <geometry><cylinder radius="0.02" length="0.55"/></geometry>
+        <geometry><box size="0.05 0.08 0.45"/></geometry>
         <material name="body_graphite"/>
       </visual>
+      <visual>
+        <origin xyz="0.026 0 0" rpy="0 0 0"/>
+        <geometry><box size="0.008 0.055 0.38"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
       <collision>
-        <geometry><cylinder radius="0.02" length="0.55"/></geometry>
+        <geometry><box size="0.055 0.085 0.47"/></geometry>
       </collision>
     </link>
     <joint name="camera_mast_joint" type="fixed">
       <parent link="upper_body_link"/>
       <child link="camera_mast_link"/>
-      <origin xyz="0.26 0 0.36" rpy="0 0 0"/>
+      <origin xyz="0.27 0 0.38" rpy="0 0 0"/>
+    </joint>
+
+    <link name="camera_head_link">
+      <xacro:box_inertial mass="0.15" x="0.04" y="0.16" z="0.10"/>
+      <visual>
+        <geometry><box size="0.04 0.16 0.10"/></geometry>
+        <material name="shell_white"/>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.055" rpy="0 0 0"/>
+        <geometry><box size="0.07 0.17 0.02"/></geometry>
+        <material name="body_graphite"/>
+      </visual>
+      <visual>
+        <origin xyz="0.025 0 0" rpy="0 0 0"/>
+        <geometry><box size="0.01 0.12 0.065"/></geometry>
+        <material name="accent_blue"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.04 0.16 0.10"/></geometry>
+      </collision>
+    </link>
+    <joint name="camera_head_joint" type="fixed">
+      <parent link="camera_mast_link"/>
+      <child link="camera_head_link"/>
+      <origin xyz="-0.03 0 0.305" rpy="0 0 0"/>
     </joint>
 
     <!-- Empty connected_to prevents the upstream macro from defining a second
@@ -151,17 +248,19 @@
     <joint name="arm_mount_to_fr3_joint" type="fixed">
       <parent link="arm_mount_link"/>
       <child link="fr3_link0"/>
-      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <origin xyz="0 0 0.01" rpy="0 0 0"/>
     </joint>
 
-    <!-- Description-only passive holding at the compact upright reference. -->
-    <xacro:passive_joint_lock joint="fr3_joint1" reference="0.0" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint2" reference="0.0" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint3" reference="0.0" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint4" reference="-0.0698" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint5" reference="0.0" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint6" reference="0.0" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint7" reference="0.0" stiffness="7000.0"/>
+    <!-- V2 navigation_stowed (rad), validated against the official FR3 limits
+         and collision meshes.  Passive locks are display-only until the arm
+         receives its future ros2_control / MoveIt integration. -->
+    <xacro:passive_joint_lock joint="fr3_joint1" reference="-0.68" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint2" reference="0.29" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint3" reference="-0.26" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint4" reference="-2.91" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint5" reference="0.75" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint6" reference="1.03" stiffness="7000.0"/>
+    <xacro:passive_joint_lock joint="fr3_joint7" reference="2.00" stiffness="7000.0"/>
     <xacro:passive_joint_lock joint="fr3_finger_joint1" reference="0.0" stiffness="800.0"/>
     <xacro:passive_joint_lock joint="fr3_finger_joint2" reference="0.0" stiffness="800.0"/>
 

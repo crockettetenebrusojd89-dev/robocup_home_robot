@@ -36,6 +36,7 @@ install(
 install(
   PROGRAMS
     scripts/load_sensors_system.py
+    scripts/generate_spawn_sdf.py
     scripts/wait_for_gazebo_world.py
     scripts/wait_for_gazebo_robot.py
     scripts/wait_for_vision_ready.py
@@ -71,6 +72,12 @@ install(
   PROGRAMS scripts/rgbd_object_localizer.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME rgbd_object_localizer
+)
+
+install(
+  PROGRAMS scripts/offset_joint_states.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME offset_joint_states
 )
 
 if(BUILD_TESTING)

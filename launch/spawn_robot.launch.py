@@ -21,6 +21,12 @@ def generate_launch_description():
         'robocup_home_robot',
         'load_sensors_system.py',
     )
+    spawn_sdf_generator = os.path.join(
+        package_share,
+        'lib',
+        'robocup_home_robot',
+        'generate_spawn_sdf.py',
+    )
 
     robot_description = ParameterValue(
         Command(['xacro ', xacro_file]),
@@ -42,7 +48,7 @@ def generate_launch_description():
         arguments=[
             '-world', 'robocup_home',
             '-name', 'robocup_home_robot',
-            '-topic', '/robot_description',
+            '-string', Command([spawn_sdf_generator, ' ', xacro_file]),
             '-x', LaunchConfiguration('x'),
             '-y', LaunchConfiguration('y'),
             '-z', LaunchConfiguration('z'),
@@ -69,8 +75,17 @@ def generate_launch_description():
             ('/model/robocup_home_robot/tf', '/tf'),
             ('/camera/image', '/camera/color/image_raw'),
             ('/camera/depth_image', '/camera/depth/image_raw'),
-            ('/model/robocup_home_robot/joint_state', '/joint_states'),
+            (
+                '/model/robocup_home_robot/joint_state',
+                '/gazebo_joint_states',
+            ),
         ],
+    )
+
+    offset_joint_states = Node(
+        package='robocup_home_robot',
+        executable='offset_joint_states',
+        output='screen',
     )
 
     load_sensors_system = ExecuteProcess(
@@ -110,5 +125,6 @@ def generate_launch_description():
         robot_state_publisher,
         spawn_robot,
         ros_gz_bridge,
+        offset_joint_states,
         load_sensors_after_spawn,
     ])
