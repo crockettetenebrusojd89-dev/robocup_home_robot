@@ -62,9 +62,34 @@ and relays offset FR3 joint states for the robot-state-publisher TF chain.
   robocup_home_robot` passed.
 - Package CTest passed: 26 tests, 0 errors, 0 failures.
 
+## Vision final-dedup V2 runtime verification
+
+- The real Gazebo + YOLO + RGB-D + TF2 visual chain ran successfully without
+  using Gazebo object ground truth.
+- `go_to_living_room` succeeded, followed by the six-step
+  `scan_living_room` and a successful `reinspect_far_object` run.
+- Runtime startup confirmed the separate radii: online
+  `deduplication_radius=0.05 m` and output-only
+  `final_deduplication_radius=0.08 m`.
+- Confirmed apple clusters `#26` and `#31` appeared during the run. At answer
+  save they were 0.062 m apart with observation counts `3 + 98`.
+- Final Dedup V2 merged that pair into one observation-count-weighted answer
+  position while leaving both live tracking clusters unchanged.
+- `/vision/save_answer` successfully wrote a legal answer JSON with finite
+  coordinates. The deduplicated-marker topic was also observed publishing.
+- The workspace-level `RUNBOOK.md` requires a later documentation fix: the
+  current FR3-integrated startup also needs
+  `source ~/franka_ros2_ws/install/setup.bash`. That outer-workspace document
+  was deliberately not changed on this branch.
+
 ## Vision final-dedup V2 not yet verified
 
-- Gazebo / RViz runtime behavior with live RGB-D and TF data.
-- Final JSON behavior during a full visual scan or competition-runner flow.
+- Gazebo runtime behavior when two real same-class objects are simultaneously
+  visible, are closer than 8 cm, and must be preserved by same-frame
+  protection.
 - Calibration of the 8 cm final radius against actual same-class object spacing
   in the competition environment.
+- This runtime test did not use Gazebo ground truth, so it does not establish
+  final TP / FP performance or competition scoring accuracy.
+- RViz GUI markers were not manually inspected, although the marker topic was
+  verified at the ROS-message level.

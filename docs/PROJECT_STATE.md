@@ -24,13 +24,24 @@ test, and work that remains unverified.
   living room has previously succeeded.
 - Navigation around temporary obstacles has previously been verified.
 
-## Vision — verified main chain
+## Vision — V2 runtime-verified chain (not scoring-verified)
 
 - The YOLO pilot detects `apple` and `coke_can`.
 - RGB-D back-projection and TF2 transformation produce object locations in
   `/map`.
 - Per-class spatial clustering, deduplication, and counting are implemented.
 - RViz markers and the answer-JSON generation main chain are present.
+- Vision Final Dedup V2 code and deterministic tests passed, and the real
+  Gazebo + YOLO + RGB-D + TF2 chain was exercised successfully.
+- The documented `go_to_living_room`, six-step `scan_living_room`, and
+  `reinspect_far_object` flows succeeded in that runtime session.
+- Online tracking retained `deduplication_radius=0.05 m`; output-only final
+  deduplication used `final_deduplication_radius=0.08 m`.
+- Confirmed apple clusters `#26` and `#31` were 0.062 m apart at answer save.
+  They were merged into one observation-count-weighted final answer location
+  with observations `3 + 98`, without modifying live tracking clusters.
+- `/vision/save_answer` successfully produced a valid JSON with finite
+  coordinates, and the deduplicated-marker topic published during the run.
 
 ## FR3 V2 static integration — verified in commit `cf93726`
 
@@ -53,6 +64,13 @@ establish arm control, MoveIt2 planning, or visual grasping.
 - FR3 active control, MoveIt2 / MoveIt Task Constructor integration, and
   grasping.
 - A complete competition run with no manual intervention.
+- Same-frame protection in Gazebo when two real same-class objects are
+  simultaneously visible and closer than 8 cm.
+- Calibration of the 8 cm final-dedup radius against official competition
+  object spacing.
+- TP / FP and competition scoring accuracy. This runtime verification used no
+  Gazebo object ground truth.
+- Manual RViz GUI inspection of the final deduplicated markers.
 
 ## Current priority
 
