@@ -5,8 +5,8 @@
 This assessment uses the SEU 2026 school-competition rulebook v4, the supplied
 visual-technology recommendation, the teacher's formally released `models.zip`,
 the official scorer, repository state, and prior runtime evidence. The reviewed
-baseline was clean `main` at commit
-`2d5cff295d28919b9839e166b8da0e8cbf4bcd51`.
+baseline is clean `main` at commit
+`36e6da74aabc31d2f239687b28d8c34f54f94deb`.
 
 The base task is worth 70 points: 40 for autonomous navigation and 10 for each
 of three judge-selected object classes. A visual answer is correct only when
@@ -14,6 +14,16 @@ the class is correct and its `/map` position is strictly within 0.10 m of the
 real object center. Extra and duplicate answers are false positives. The robot
 must finish the base task within eight minutes without keyboard, mouse, RViz,
 or other manual control after leaving the start.
+
+The teacher's latest clarification adds an optional coordinate-calibration
+mode. If the team's `/map` frame does not coincide with Gazebo world, the
+answer must include the four designated living-room wall corners `C_0` through
+`C_3`, measured manually in `/map` with the permitted RViz Publish Point tool.
+The official scorer fits a 2D rigid `/map` -> world transform from `C_0`, `C_1`
+and `C_2`, independently validates it with `C_3`, then transforms submitted
+objects before matching. If the frames already coincide, an objects-only
+answer remains valid. Runtime code must not inspect the world/SDF or simulator
+ground truth to obtain corners or object positions.
 
 ## Verified baseline
 
@@ -37,6 +47,52 @@ official 18-class asset set removes the P0 class-universe uncertainty and raises
 confidence in the trained model's scope, but it does not by itself raise
 end-to-end run readiness because the model is not yet integrated and P1/P2 are
 still open.
+
+## Map/world and corners audit
+
+The project has **not previously completed corner calibration**. There is no
+saved `C_0`-`C_3` configuration, no corner transform in the runtime, and the
+current answer writer emits exactly `{"objects": ...}`. Earlier project state
+only listed direct corner validation as unverified.
+
+The current frames are deliberately close, but are not proven identical:
+
+- `example_map_v1.yaml` has occupancy-grid origin `[-5.06, -4.04, 0]`. This
+  locates the raster in `/map`; it does not prove `/map == world`.
+- Gazebo spawns the robot at world pose
+  `(-4.852336, -0.532520, 0.014067 rad)`.
+- AMCL seeds the same start in `/map` at
+  `(-4.828, -0.477, 0.010 rad)`.
+- A live read-only check showed Gazebo DiffDrive odometry starts at zero and
+  AMCL publishes `map -> odom` from that configured map start. The two start
+  anchors differ by 0.0606 m and 0.00407 rad (0.233 degrees).
+- Interpreting those configured anchors as the same physical start implies an
+  approximate `map -> world` transform with rotation `0.004067 rad` and
+  translation `(-0.0263, -0.0359) m`. This is diagnostic evidence of near
+  alignment, not a replacement for the teacher-defined corner calibration.
+
+Objects-only scoring works because omission of `corners` makes the scorer use
+the identity transform, and the combined frame offset plus perception error
+has remained inside the strict 0.10 m gate. Replaying the previously saved
+answers with the supplied scorer and an explicit `--match-threshold 0.10`
+again produced 20/20 for runs 101 and 103. Run 103's three matched distances
+were 0.0746 m, 0.0235 m and 0.0160 m; no false positives were present. Thus
+20/20 proves that the identity approximation was adequate for that layout and
+those detections, not that the frames are mathematically identical.
+
+The supplied scorer currently defaults its object gate to 0.15 m, while the
+teacher's formal scoring requirement and project acceptance criterion are
+0.10 m. All project validation therefore continues to pass
+`--match-threshold 0.10` explicitly unless the teacher publishes a different
+official invocation.
+
+Corners could remove a systematic translation/rotation and increase margin
+for detections near 0.10 m, especially after a map, spawn, or competition-world
+change. They also introduce risk: a wrong wall intersection, wall-thickness
+ambiguity, or inconsistent manual click can rotate every otherwise-correct
+object, and the scorer rejects the submission if the fit residual or held-out
+`C_3` residual exceeds its corner threshold. Corners are therefore not enabled
+from inference alone.
 
 ## Priority gaps
 
@@ -91,6 +147,28 @@ same-class objects, occlusion, table corners, and temporary obstacles. Record
 official-score TP/FP/FN, maximum localization error, completion time, and
 failure stage. Use failures to change one justified parameter or component at
 a time.
+
+The first coordinate-calibration item inside P2 is a non-runtime A/B test:
+
+1. With the saved `example_map_v1` loaded, manually capture the teacher-defined
+   `C_0`-`C_3` wall intersections in `/map` using RViz Publish Point. Repeat the
+   capture independently to measure click stability; do not read the world or
+   SDF.
+2. Duplicate one unchanged, real perception answer into objects-only and
+   corners-plus-objects variants.
+3. Run both through the same official scorer with an explicit 0.10 m object
+   gate. Compare validity, fitted rotation/translation, all fit residuals,
+   held-out `C_3` residual, each TP distance, FP/FN and total score.
+4. Keep objects-only unless repeated corner captures remain stable, `C_3` has
+   comfortable margin below the official corner threshold, and the calibrated
+   variant preserves the score while consistently reducing systematic or
+   maximum object error across more than one layout.
+
+This work must not preempt P1. It becomes urgent before formal submission if a
+new map or spawn pose is introduced, the teacher's formal world moves the
+shared start/layout frame, repeated objects-only errors show a consistent
+direction, any correct-class detection approaches or crosses 0.10 m, or the
+official scorer invocation makes calibration mandatory.
 
 ### Deferred
 
