@@ -116,6 +116,11 @@ if(BUILD_TESTING)
     PROPERTIES ENVIRONMENT
       "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/tools/formal_dataset/scripts"
   )
+  add_test(
+    NAME formal_world_loader
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_formal_world_loader.py
+  )
 endif()
 
 ament_package()

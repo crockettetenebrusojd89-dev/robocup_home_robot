@@ -1,6 +1,9 @@
 """Start the saved-map Nav2 stack with the existing simulation and robot."""
 
 import os
+from pathlib import Path
+import re
+import shlex
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -10,6 +13,7 @@ from launch.actions import (
     ExecuteProcess,
     IncludeLaunchDescription,
     LogInfo,
+    OpaqueFunction,
     RegisterEventHandler,
     SetEnvironmentVariable,
 )
@@ -18,6 +22,71 @@ from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
+
+
+WORLD_NAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]+$')
+
+
+def _validated_world_name(context):
+    world_name = LaunchConfiguration('world_name').perform(context).strip()
+    if not world_name or WORLD_NAME_PATTERN.fullmatch(world_name) is None:
+        raise RuntimeError(
+            'world_name must contain only letters, digits, underscore, dot, '
+            f'or hyphen; got {world_name!r}'
+        )
+    return world_name
+
+
+def _resolve_world_file(value):
+    """Resolve a supplied path without reading or parsing scene contents."""
+    if not value.strip():
+        return None
+    world_path = Path(value).expanduser().resolve()
+    if world_path.suffix.lower() != '.world':
+        raise RuntimeError(f'world_file must end in .world: {world_path}')
+    if not world_path.is_file():
+        raise RuntimeError(f'world_file does not exist: {world_path}')
+    return world_path
+
+
+def _select_world_launch(context, world_share):
+    """Use the packaged example or pass an official file directly to Gazebo."""
+    _validated_world_name(context)
+    world_path = _resolve_world_file(
+        LaunchConfiguration('world_file').perform(context)
+    )
+    if world_path is None:
+        return [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(world_share, 'launch', 'world.launch.py')
+                ),
+                launch_arguments={'world_type': 'example'}.items(),
+            )
+        ]
+
+    ros_gz_share = get_package_share_directory('ros_gz_sim')
+    gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(ros_gz_share, 'launch', 'gz_sim.launch.py')
+        ),
+        launch_arguments={
+            'gz_args': shlex.join(['-r', '-v', '2', str(world_path)]),
+            'gz_version': '6',
+            'on_exit_shutdown': 'true',
+        }.items(),
+    )
+    clock_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+        output='screen',
+    )
+    return [
+        LogInfo(msg=f'Loading supplied competition world: {world_path}'),
+        gazebo,
+        clock_bridge,
+    ]
 
 
 def generate_launch_description():
@@ -30,11 +99,8 @@ def generate_launch_description():
     nav2_params = os.path.join(robot_share, 'config', 'nav2_params.yaml')
     map_yaml = os.path.join(robot_share, 'maps', 'example_map_v1.yaml')
 
-    world_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(world_share, 'launch', 'world.launch.py')
-        ),
-        launch_arguments={'world_type': 'example'}.items(),
+    world_launch = OpaqueFunction(
+        function=lambda context: _select_world_launch(context, world_share)
     )
 
     spawn_launch = IncludeLaunchDescription(
@@ -46,6 +112,7 @@ def generate_launch_description():
             'y': LaunchConfiguration('spawn_y'),
             'z': LaunchConfiguration('spawn_z'),
             'yaw': LaunchConfiguration('spawn_yaw'),
+            'world_name': LaunchConfiguration('world_name'),
         }.items(),
     )
 
@@ -56,7 +123,9 @@ def generate_launch_description():
                 'lib',
                 'robocup_home_robot',
                 'wait_for_gazebo_world.py',
-            )
+            ),
+            '--world-name',
+            LaunchConfiguration('world_name'),
         ],
         name='wait_for_gazebo_world',
         output='screen',
@@ -191,6 +260,19 @@ def generate_launch_description():
         ]
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'world_file',
+            default_value='',
+            description=(
+                'Optional competition .world path. Empty uses the packaged '
+                'example world; scene contents are never parsed by this launch.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'world_name',
+            default_value='robocup_home',
+            description='Gazebo world name used for services and robot spawning.',
+        ),
         DeclareLaunchArgument(
             'spawn_x',
             default_value='-4.8523360944520624',

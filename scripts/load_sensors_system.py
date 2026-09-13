@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
 """Load the Gazebo Fortress sensor systems required by this robot."""
 
+import argparse
+import re
 import subprocess
 import sys
 import time
 
 
-WORLD_NAME = 'robocup_home'
-SYSTEM_ADD_SERVICE = f'/world/{WORLD_NAME}/entity/system/add'
 SCAN_TOPIC = '/scan'
 IMU_TOPIC = '/imu'
 POLL_PERIOD = 0.2
 SERVICE_TIMEOUT = 60.0
 EXISTING_TOPIC_TIMEOUT = 5.0
 NEW_TOPIC_TIMEOUT = 30.0
+WORLD_NAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]+$')
+
+
+def parse_arguments(arguments=None):
+    """Parse and validate the Gazebo world service namespace."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--world-name', default='robocup_home')
+    parsed = parser.parse_args(arguments)
+    if WORLD_NAME_PATTERN.fullmatch(parsed.world_name) is None:
+        parser.error(
+            'world name may contain only letters, digits, underscore, dot, '
+            'or hyphen'
+        )
+    return parsed
 
 
 def run_ign(arguments, timeout=5.0):
@@ -54,7 +68,7 @@ def topic_available(topic):
     return listing_contains(['topic', '-l'], topic)
 
 
-def load_system(filename, name, innerxml=None):
+def load_system(world_name, system_add_service, filename, name, innerxml=None):
     """Add one world system through Gazebo's runtime service."""
     plugin_fields = (
         f'filename: "{filename}", '
@@ -64,12 +78,12 @@ def load_system(filename, name, innerxml=None):
         plugin_fields += f', innerxml: "{innerxml}"'
 
     request = (
-        f'entity: {{name: "{WORLD_NAME}", type: 9}} '
+        f'entity: {{name: "{world_name}", type: 9}} '
         f'plugins: {{{plugin_fields}}}'
     )
     result = run_ign([
         'service',
-        '-s', SYSTEM_ADD_SERVICE,
+        '-s', system_add_service,
         '--reqtype', 'ignition.msgs.EntityPlugin_V',
         '--reptype', 'ignition.msgs.Boolean',
         '--timeout', '5000',
@@ -88,17 +102,19 @@ def load_system(filename, name, innerxml=None):
     return True
 
 
-def main():
+def main(arguments=None):
     """Wait for Gazebo and add each missing sensor system exactly once."""
-    print(f'[sensors_loader] Waiting for {SYSTEM_ADD_SERVICE}')
+    parsed = parse_arguments(arguments)
+    system_add_service = f'/world/{parsed.world_name}/entity/system/add'
+    print(f'[sensors_loader] Waiting for {system_add_service}')
     service_ready = wait_until(
-        lambda: listing_contains(['service', '-l'], SYSTEM_ADD_SERVICE),
+        lambda: listing_contains(['service', '-l'], system_add_service),
         SERVICE_TIMEOUT,
     )
     if not service_ready:
         print(
             f'[sensors_loader] Service unavailable after {SERVICE_TIMEOUT:.0f}s: '
-            f'{SYSTEM_ADD_SERVICE}',
+            f'{system_add_service}',
             file=sys.stderr,
         )
         return 1
@@ -109,6 +125,8 @@ def main():
         print('[sensors_loader] /scan already exists; Sensors system not reloaded')
     else:
         loaded = load_system(
+            parsed.world_name,
+            system_add_service,
             'ignition-gazebo-sensors-system',
             'ignition::gazebo::systems::Sensors',
             '<render_engine>ogre2</render_engine>',
@@ -135,6 +153,8 @@ def main():
         return 0
 
     loaded = load_system(
+        parsed.world_name,
+        system_add_service,
         'ignition-gazebo-imu-system',
         'gz::sim::systems::Imu',
     )
