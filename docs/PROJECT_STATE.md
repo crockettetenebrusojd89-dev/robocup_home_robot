@@ -51,7 +51,7 @@ test, and work that remains unverified.
   match threshold, it scored 20/20: apple TP=2 FP=0 FN=0 and coke_can TP=1
   FP=0 FN=0. Match distances were 0.0746 m, 0.0235 m, and 0.0160 m.
 
-## Unified official-model detector — offline verified
+## Unified official-model detector — runtime integration verified
 
 - The teacher's formally released `models.zip` contains exactly the same 18
   directory identifiers as `tools/formal_dataset/classes.json`: missing 0,
@@ -70,10 +70,20 @@ test, and work that remains unverified.
 - The existing CPU competition vision environment successfully loaded the
   CUDA-trained weights, verified all 18 class names in manifest order, and ran
   inference. The known-good runtime environment was not modified.
+- The `work/formal-base-runtime` integration requires exactly three distinct
+  judge targets and a positive group number, validates the checkpoint against
+  the exact 18-class manifest, and rejects unknown names by default. An
+  explicit alias file is available but intentionally empty until the judge
+  input syntax is confirmed.
+- One unattended `example.world` smoke run navigated to the living room, ran
+  the twelve-view scan, deduplicated observations, saved the three-key answer,
+  and exited cleanly. The recorded result was `apple=1`, `coke_can=1`, and
+  `banana=0` in 96 seconds from launch acceptance to runner completion.
 
-This establishes the closed-set model-development chain, not full competition
-generalization. The pilot model remains the runtime default until integration
-and randomized end-to-end scoring are completed.
+This establishes the formal model's runtime contract and one complete
+integration pass, not full competition generalization. The generic localizer's
+pilot defaults remain unchanged; the formal launch selects the 18-class model
+explicitly.
 
 The official directory identifiers do not establish the spelling or formatting
 of judge input strings. Until that interface is published, the runner must keep
@@ -100,7 +110,7 @@ establish arm control, MoveIt2 planning, or visual grasping.
   specifically; only its Nav2 smoke test was performed for this revision.
 - FR3 active control, MoveIt2 / MoveIt Task Constructor integration, and
   grasping.
-- A complete competition run with no manual intervention.
+- A complete competition-day `.world` run with no manual intervention.
 - Same-frame protection in Gazebo when two real same-class objects are
   simultaneously visible and closer than 8 cm.
 - Calibration of the 8 cm final-dedup radius against official competition
@@ -112,10 +122,10 @@ establish arm control, MoveIt2 planning, or visual grasping.
 
 ## Current priority
 
-1. Integrate explicit model path, exactly three judge inputs, a configurable
-   normalization/alias boundary, and group number into a fail-closed
-   no-intervention base-task runner.
-2. Run randomized full-chain official scoring, including nearby same-class
+1. Review the completed `work/formal-base-runtime` integration and retain its
+   successful smoke evidence before merging.
+2. Combine it with the separately reviewed formal-world loader, then run
+   randomized full-chain official scoring, including nearby same-class
    objects, temporary obstacles, occlusion, corners, and the eight-minute cap.
 3. Use those failures to improve model generalization, localization, search,
    or deduplication one justified change at a time.

@@ -35,6 +35,7 @@ from ultralytics import YOLO
 from visualization_msgs.msg import Marker, MarkerArray
 from vision_final_dedup import final_deduplicate_clusters
 from vision_final_dedup import partition_by_minimum_observations
+from formal_runtime_config import validate_model_contract
 
 
 DETECTION_LOG_PERIOD = 1.0
@@ -129,6 +130,10 @@ class RgbdObjectLocalizer(Node):
         self.declare_parameter('min_confirmations', 3)
         self.declare_parameter('final_min_confirmations', 5)
         self.declare_parameter('target_classes', ['apple', 'coke_can'])
+        self.declare_parameter(
+            'expected_model_classes',
+            Parameter.Type.STRING_ARRAY,
+        )
         self.declare_parameter('group_number', -1)
         self.declare_parameter(
             'answer_output_dir',
@@ -199,6 +204,10 @@ class RgbdObjectLocalizer(Node):
             str(class_name)
             for class_name in self.get_parameter('target_classes').value
         )
+        self.expected_model_classes = tuple(
+            str(class_name)
+            for class_name in self.get_parameter('expected_model_classes').value
+        )
         self.group_number = int(self.get_parameter('group_number').value)
         self.answer_output_dir = Path(
             self.get_parameter('answer_output_dir').value
@@ -207,8 +216,16 @@ class RgbdObjectLocalizer(Node):
 
         self.get_logger().info(f'Loading local YOLO model: {model_path}')
         self.model = YOLO(str(model_path))
+        try:
+            model_names = validate_model_contract(
+                self.model.names,
+                self.expected_model_classes,
+                self.target_classes,
+            )
+        except ValueError as error:
+            raise RuntimeError(f'Invalid YOLO model contract: {error}') from error
         self.get_logger().info(
-            f'YOLO model loaded; classes={self.model.names}, '
+            f'YOLO model loaded; classes={list(model_names)}, '
             f'device={self.device}, confidence_threshold='
             f'{self.confidence_threshold:.2f}'
         )
@@ -346,6 +363,29 @@ class RgbdObjectLocalizer(Node):
             raise RuntimeError(
                 'final_min_confirmations must be at least min_confirmations.'
             )
+        if not self.target_classes:
+            raise RuntimeError('target_classes must not be empty.')
+        if any(not class_name for class_name in self.target_classes):
+            raise RuntimeError('target_classes must not contain empty names.')
+        if len(set(self.target_classes)) != len(self.target_classes):
+            raise RuntimeError('target_classes must not contain duplicates.')
+        if self.expected_model_classes:
+            if len(self.expected_model_classes) != 18:
+                raise RuntimeError(
+                    'Formal expected_model_classes must contain 18 names.'
+                )
+            if len(set(self.expected_model_classes)) != 18:
+                raise RuntimeError(
+                    'Formal expected_model_classes must be distinct.'
+                )
+            if len(self.target_classes) != 3:
+                raise RuntimeError(
+                    'Formal runtime requires exactly three target_classes.'
+                )
+            if self.group_number <= 0:
+                raise RuntimeError(
+                    'Formal runtime requires a positive group_number.'
+                )
 
     def _warn_throttled(self, key, message):
         now = time.monotonic()
