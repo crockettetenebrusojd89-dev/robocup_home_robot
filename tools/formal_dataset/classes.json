@@ -1,0 +1,22 @@
+{
+  "classes": [
+    {"yolo_id": 0, "name": "apple", "gazebo_label": 1},
+    {"yolo_id": 1, "name": "banana", "gazebo_label": 2},
+    {"yolo_id": 2, "name": "beer", "gazebo_label": 3},
+    {"yolo_id": 3, "name": "bleach_cleanser", "gazebo_label": 4},
+    {"yolo_id": 4, "name": "bowl", "gazebo_label": 5},
+    {"yolo_id": 5, "name": "chips_can", "gazebo_label": 6},
+    {"yolo_id": 6, "name": "coke_can", "gazebo_label": 7},
+    {"yolo_id": 7, "name": "cracker_box", "gazebo_label": 8},
+    {"yolo_id": 8, "name": "gelatin_box", "gazebo_label": 9},
+    {"yolo_id": 9, "name": "master_chef_can", "gazebo_label": 10},
+    {"yolo_id": 10, "name": "mustard_bottle", "gazebo_label": 11},
+    {"yolo_id": 11, "name": "pitcher_base", "gazebo_label": 12},
+    {"yolo_id": 12, "name": "potted_meat_can", "gazebo_label": 13},
+    {"yolo_id": 13, "name": "pudding_box", "gazebo_label": 14},
+    {"yolo_id": 14, "name": "sugar_box", "gazebo_label": 15},
+    {"yolo_id": 15, "name": "tomato_soup_can", "gazebo_label": 16},
+    {"yolo_id": 16, "name": "tuna_fish_can", "gazebo_label": 17},
+    {"yolo_id": 17, "name": "windex_bottle", "gazebo_label": 18}
+  ]
+}

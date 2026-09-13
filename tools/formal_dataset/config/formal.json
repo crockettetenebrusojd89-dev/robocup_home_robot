@@ -1,0 +1,25 @@
+{
+  "seed": 20260913,
+  "train_images": 1800,
+  "val_images": 360,
+  "secondary_object_fraction": 0.5,
+  "image": {
+    "width": 640,
+    "height": 480,
+    "horizontal_fov_rad": 1.2217304764,
+    "near_clip_m": 0.2,
+    "far_clip_m": 10.0
+  },
+  "randomization": {
+    "object_x_m": [-0.25, 0.30],
+    "object_y_m": [-0.25, 0.25],
+    "object_yaw_rad": [-3.1415926536, 3.1415926536],
+    "minimum_object_spacing_m": 0.15,
+    "camera_distance_m": [0.70, 1.75],
+    "camera_height_m": [0.90, 1.25],
+    "camera_lateral_offset_m": [-0.22, 0.22],
+    "camera_yaw_jitter_rad": [-0.08727, 0.08727],
+    "camera_pitch_jitter_rad": [-0.05236, 0.05236]
+  },
+  "minimum_bbox_area_px": 64
+}

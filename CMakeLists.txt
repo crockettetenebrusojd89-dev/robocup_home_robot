@@ -106,6 +106,16 @@ if(BUILD_TESTING)
     PROPERTIES ENVIRONMENT
       "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
   )
+  add_test(
+    NAME formal_dataset_tools
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_formal_dataset_tools.py
+  )
+  set_tests_properties(
+    formal_dataset_tools
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/tools/formal_dataset/scripts"
+  )
 endif()
 
 ament_package()

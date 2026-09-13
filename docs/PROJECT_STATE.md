@@ -51,6 +51,26 @@ test, and work that remains unverified.
   match threshold, it scored 20/20: apple TP=2 FP=0 FN=0 and coke_can TP=1
   FP=0 FN=0. Match distances were 0.0746 m, 0.0235 m, and 0.0160 m.
 
+## Unified organizer-asset detector — offline verified
+
+- `tools/formal_dataset` defines one audited 18-class manifest and an
+  offline-only Gazebo data-generation, validation, preview, training, and
+  per-class evaluation pipeline.
+- The first dataset contains 1,800 training images, 360 validation images, and
+  3,266 instances. Every class occurs in both splits; structure, image-label
+  pairing, box ranges, class identity, duplicate images, and train/validation
+  leakage checks passed.
+- The unified YOLO11n best checkpoint scored precision 0.977, recall 0.965,
+  mAP50 0.981, and mAP50-95 0.926 on its independent synthetic validation
+  split. Per-class results are stored beside the generated weights.
+- The existing CPU competition vision environment successfully loaded the
+  CUDA-trained weights, verified all 18 class names in manifest order, and ran
+  inference. The known-good runtime environment was not modified.
+
+This establishes the closed-set model-development chain, not full competition
+generalization. The pilot model remains the runtime default until integration
+and randomized end-to-end scoring are completed.
+
 ## FR3 V2 static integration — verified in commit `cf93726`
 
 - The navigation-stowed joint reference is
@@ -83,8 +103,10 @@ establish arm control, MoveIt2 planning, or visual grasping.
 
 ## Current priority
 
-1. Base-task stability.
-2. Reliable visual localization and deduplication.
-3. Multi-view search.
-4. A complete no-intervention competition run.
-5. Manipulation and grasping afterwards.
+1. Integrate explicit model path, exactly three requested classes, and group
+   number into a fail-closed no-intervention base-task runner.
+2. Run randomized full-chain official scoring, including nearby same-class
+   objects, temporary obstacles, occlusion, corners, and the eight-minute cap.
+3. Use those failures to improve model generalization, localization, search,
+   or deduplication one justified change at a time.
+4. Manipulation and grasping afterwards.

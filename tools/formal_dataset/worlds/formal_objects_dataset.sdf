@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <world name="formal_objects_dataset">
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-sensors-system"
+            name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <scene>
+      <ambient>0.55 0.55 0.55 1</ambient>
+      <background>0.72 0.76 0.80 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light type="directional" name="sun">
+      <pose>0 0 5 0 0 0</pose>
+      <diffuse>0.85 0.85 0.85 1</diffuse>
+      <specular>0.25 0.25 0.25 1</specular>
+      <attenuation>
+        <range>100</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.45 0.20 -0.87</direction>
+    </light>
+
+    <model name="ground">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>8 8</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>8 8</size></plane></geometry>
+          <material>
+            <ambient>0.35 0.35 0.35 1</ambient>
+            <diffuse>0.45 0.45 0.45 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="table">
+      <static>true</static>
+      <link name="top">
+        <pose>0 0 0.72 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>1.20 0.80 0.06</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.20 0.80 0.06</size></box></geometry>
+          <material>
+            <ambient>0.40 0.24 0.12 1</ambient>
+            <diffuse>0.55 0.34 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Each unique Gazebo label maps to the matching YOLO ID in classes.json. -->
+    <include><uri>model://apple</uri><name>apple</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>1</label></plugin></include>
+    <include><uri>model://banana</uri><name>banana</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>2</label></plugin></include>
+    <include><uri>model://beer</uri><name>beer</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>3</label></plugin></include>
+    <include><uri>model://bleach_cleanser</uri><name>bleach_cleanser</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>4</label></plugin></include>
+    <include><uri>model://bowl</uri><name>bowl</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>5</label></plugin></include>
+    <include><uri>model://chips_can</uri><name>chips_can</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>6</label></plugin></include>
+    <include><uri>model://coke_can</uri><name>coke_can</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>7</label></plugin></include>
+    <include><uri>model://cracker_box</uri><name>cracker_box</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>8</label></plugin></include>
+    <include><uri>model://gelatin_box</uri><name>gelatin_box</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>9</label></plugin></include>
+    <include><uri>model://master_chef_can</uri><name>master_chef_can</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>10</label></plugin></include>
+    <include><uri>model://mustard_bottle</uri><name>mustard_bottle</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>11</label></plugin></include>
+    <include><uri>model://pitcher_base</uri><name>pitcher_base</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>12</label></plugin></include>
+    <include><uri>model://potted_meat_can</uri><name>potted_meat_can</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>13</label></plugin></include>
+    <include><uri>model://pudding_box</uri><name>pudding_box</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>14</label></plugin></include>
+    <include><uri>model://sugar_box</uri><name>sugar_box</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>15</label></plugin></include>
+    <include><uri>model://tomato_soup_can</uri><name>tomato_soup_can</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>16</label></plugin></include>
+    <include><uri>model://tuna_fish_can</uri><name>tuna_fish_can</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>17</label></plugin></include>
+    <include><uri>model://windex_bottle</uri><name>windex_bottle</name><static>true</static><pose>0 0 -5 0 0 0</pose><plugin filename="ignition-gazebo-label-system" name="ignition::gazebo::systems::Label"><label>18</label></plugin></include>
+
+    <model name="training_camera">
+      <static>true</static>
+      <pose>-1.20 0 1.075 0 0.1745329252 0</pose>
+      <link name="link">
+        <sensor name="rgb" type="camera">
+          <topic>/training/rgb</topic>
+          <camera>
+            <horizontal_fov>1.2217304764</horizontal_fov>
+            <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+            <clip><near>0.20</near><far>10.0</far></clip>
+          </camera>
+          <always_on>true</always_on><update_rate>15</update_rate><visualize>false</visualize>
+        </sensor>
+        <sensor name="visible_boxes" type="boundingbox_camera">
+          <topic>/training/boxes</topic>
+          <camera>
+            <box_type>visible_2d</box_type>
+            <horizontal_fov>1.2217304764</horizontal_fov>
+            <image><width>640</width><height>480</height></image>
+            <clip><near>0.20</near><far>10.0</far></clip>
+          </camera>
+          <always_on>true</always_on><update_rate>15</update_rate><visualize>false</visualize>
+        </sensor>
+      </link>
+    </model>
+  </world>
+</sdf>
