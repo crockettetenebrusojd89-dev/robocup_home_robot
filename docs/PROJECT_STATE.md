@@ -51,8 +51,12 @@ test, and work that remains unverified.
   match threshold, it scored 20/20: apple TP=2 FP=0 FN=0 and coke_can TP=1
   FP=0 FN=0. Match distances were 0.0746 m, 0.0235 m, and 0.0160 m.
 
-## Unified organizer-asset detector — offline verified
+## Unified official-model detector — offline verified
 
+- The teacher's formally released `models.zip` contains exactly the same 18
+  directory identifiers as `tools/formal_dataset/classes.json`: missing 0,
+  extra 0, and naming differences 0. This is the complete official model asset
+  set.
 - `tools/formal_dataset` defines one audited 18-class manifest and an
   offline-only Gazebo data-generation, validation, preview, training, and
   per-class evaluation pipeline.
@@ -70,6 +74,11 @@ test, and work that remains unverified.
 This establishes the closed-set model-development chain, not full competition
 generalization. The pilot model remains the runtime default until integration
 and randomized end-to-end scoring are completed.
+
+The official directory identifiers do not establish the spelling or formatting
+of judge input strings. Until that interface is published, the runner must keep
+normalization and aliases explicit and configurable, avoid assuming case or
+underscore conventions, and reject unknown or ambiguous inputs.
 
 ## FR3 V2 static integration — verified in commit `cf93726`
 
@@ -103,8 +112,9 @@ establish arm control, MoveIt2 planning, or visual grasping.
 
 ## Current priority
 
-1. Integrate explicit model path, exactly three requested classes, and group
-   number into a fail-closed no-intervention base-task runner.
+1. Integrate explicit model path, exactly three judge inputs, a configurable
+   normalization/alias boundary, and group number into a fail-closed
+   no-intervention base-task runner.
 2. Run randomized full-chain official scoring, including nearby same-class
    objects, temporary obstacles, occlusion, corners, and the eight-minute cap.
 3. Use those failures to improve model generalization, localization, search,

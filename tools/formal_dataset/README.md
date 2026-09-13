@@ -9,11 +9,13 @@ The class order is fixed in `classes.json`. Gazebo labels and object poses are
 used only to create offline annotations. Generated datasets and trained weights
 belong under `~/robocup_assets`; they are intentionally not committed here.
 
-The 18 identifiers are the model-directory names in the organizer-distributed
-`wpr_simulation_ros2` assets. The rulebook gives object-name examples but does
-not itself declare a complete class manifest. If the organizer later publishes
-a separate authoritative name list, reconcile that list with `classes.json`
-before training or changing competition output names.
+The 18 identifiers have been checked directory by directory against the
+teacher's formally released `models.zip`: missing 0, extra 0, and naming
+differences 0. They are the official model directory identifiers. This does not
+define how the judge input strings will be formatted on competition day.
+Runtime integration must keep a separate, explicit normalization/alias mapping
+and must not silently assume case, spaces versus underscores, or alternate
+names.
 
 ## Smoke test
 

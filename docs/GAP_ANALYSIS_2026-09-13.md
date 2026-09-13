@@ -3,7 +3,7 @@
 ## Decision basis
 
 This assessment uses the SEU 2026 school-competition rulebook v4, the supplied
-visual-technology recommendation, the organizer-distributed simulation assets,
+visual-technology recommendation, the teacher's formally released `models.zip`,
 the official scorer, repository state, and prior runtime evidence. The reviewed
 baseline was clean `main` at commit
 `2d5cff295d28919b9839e166b8da0e8cbf4bcd51`.
@@ -32,14 +32,21 @@ Estimated base-task readiness is 55–65%. The navigation and two-class geometry
 chain are strong, but the current system is not a complete competition
 deliverable.
 
+That estimate describes the clean-`main` runtime baseline. Confirmation of the
+official 18-class asset set removes the P0 class-universe uncertainty and raises
+confidence in the trained model's scope, but it does not by itself raise
+end-to-end run readiness because the model is not yet integrated and P1/P2 are
+still open.
+
 ## Priority gaps
 
-### P0 — unified organizer-asset closed-set detector
+### P0 — unified official-model closed-set detector
 
 The current two-class model cannot represent three distinct judge-selected
 classes. This is a structural scoring ceiling, not a threshold-tuning problem.
-The organizer assets contain 18 object model directories, and the existing
-two-class synthetic-data pilot already proves the lowest-risk technical route.
+The teacher's formally released `models.zip` contains exactly 18 object model
+directories, and the existing two-class synthetic-data pilot already proves
+the lowest-risk technical route.
 
 Success gates:
 
@@ -54,17 +61,28 @@ Success gates:
 5. Model names match the manifest and the existing RGB-D runtime can filter any
    requested class subset without using simulator truth.
 
-The rulebook itself does not contain a complete class manifest. The 18 names in
-this work are the organizer-distributed model-directory identifiers. A later
-authoritative object-name notice must be reconciled before competition output
-names are frozen.
+The rulebook itself does not contain a complete class manifest, but the
+teacher's formally released `models.zip` has now been checked directory by
+directory against `tools/formal_dataset/classes.json`: missing 0, extra 0, and
+naming differences 0. The current 18-class set is therefore the complete
+official model asset set.
+
+This confirms the **official model directory identifiers**, not the syntax of
+the **judge input strings on competition day**. Until the input interface is
+specified, no assumption is made about case, spaces versus underscores,
+punctuation, singular/plural forms, or aliases. P1 must introduce an explicit,
+auditable normalization/alias boundary that maps only documented or configured
+input forms to the canonical 18 directory identifiers and fails closed on an
+unknown or ambiguous name.
 
 ### P1 — zero-intervention competition runner
 
-Provide one bounded runner that validates exactly three known target classes
-and a positive group number, navigates, resets the observation window, scans,
-performs only evidence-driven reinspection, saves once, and exits within the
-base-task time budget. Fail closed when a prerequisite or stage fails.
+Provide one bounded runner that accepts exactly three judge target strings and
+a positive group number, resolves each target through an explicit
+normalization/alias map to a distinct canonical class, navigates, resets the
+observation window, scans, performs only evidence-driven reinspection, saves
+once, and exits within the base-task time budget. Reject unknown, ambiguous, or
+duplicate-after-normalization targets and fail closed when any stage fails.
 
 ### P2 — high-information scenario matrix
 
@@ -104,10 +122,12 @@ model selection unchanged.
   preserved the exact 18-name manifest order, and completed inference, so no
   runtime framework replacement is required.
 
-All five P0 success gates are complete for the synthetic first pass. This is a
-model-development result, not evidence that all 18 classes will score equally
-well in the full competition world. P1 runner integration and P2 randomized
-end-to-end scoring remain required before this model replaces the pilot default.
+All five P0 success gates are complete for the synthetic first pass, and the
+canonical class set is now confirmed against the official `models.zip`. This
+is a model-development result, not evidence that all 18 classes will score
+equally well in the full competition world. Judge-input normalization remains
+a P1 interface task; P1 runner integration and P2 randomized end-to-end scoring
+remain required before this model replaces the pilot default.
 
 ## Fair-play boundary
 
