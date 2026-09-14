@@ -24,6 +24,12 @@ install(
 )
 
 install(
+  FILES tools/formal_dataset/classes.json
+  DESTINATION share/${PROJECT_NAME}/config
+  RENAME formal_object_classes.json
+)
+
+install(
   DIRECTORY maps
   DESTINATION share/${PROJECT_NAME}
 )
@@ -75,8 +81,23 @@ install(
 )
 
 install(
-  FILES scripts/vision_final_dedup.py
+  PROGRAMS scripts/formal_base_task_runner.py
   DESTINATION lib/${PROJECT_NAME}
+  RENAME formal_base_task_runner
+)
+
+install(
+  FILES
+    scripts/formal_runtime_config.py
+    scripts/go_to_living_room.py
+    scripts/scan_living_room.py
+    scripts/vision_final_dedup.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  FILES scripts/formal_runtime_config.py
+  DESTINATION share/${PROJECT_NAME}/launch
 )
 
 install(
@@ -115,6 +136,21 @@ if(BUILD_TESTING)
     formal_dataset_tools
     PROPERTIES ENVIRONMENT
       "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/tools/formal_dataset/scripts"
+  )
+  add_test(
+    NAME formal_world_loader
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_formal_world_loader.py
+  )
+  add_test(
+    NAME formal_runtime
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_formal_runtime.py
+  )
+  set_tests_properties(
+    formal_runtime
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
   )
 endif()
 
