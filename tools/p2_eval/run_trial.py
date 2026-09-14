@@ -145,6 +145,14 @@ def _stage_from_log(log: str, timed_out: bool) -> tuple[str, str | None]:
         return "timeout", "formal runtime exceeded its configured time limit"
     if "Formal base task succeeded:" in log:
         return "success", None
+    if (
+        "Timed out waiting for transform from base_link to map" in log
+        or 'Invalid frame ID "map"' in log
+    ):
+        return (
+            "nav2_map_tf",
+            "Nav2 could not obtain the map-to-base_link transform",
+        )
     checks = [
         ("Gazebo world is ready", "world_load", "Gazebo world did not become ready"),
         (

@@ -17,6 +17,8 @@ from run_trial import _observation_window
 from run_trial import _stage_from_log
 from run_trial import build_runtime_command
 from run_trial import build_scorer_command
+from run_repeatability import aggregate_summaries
+from run_repeatability import repeatability_row
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -148,6 +150,16 @@ class P2EvaluationTest(unittest.TestCase):
             ("nav2_ready", "Nav2 did not become active"),
         )
 
+    def test_stage_parser_identifies_missing_map_transform(self):
+        log = "Timed out waiting for transform from base_link to map to become available"
+        self.assertEqual(
+            _stage_from_log(log, False),
+            (
+                "nav2_map_tf",
+                "Nav2 could not obtain the map-to-base_link transform",
+            ),
+        )
+
     def test_prefixed_ros_log_evidence_is_recognized(self):
         log = "\n".join(
             (
@@ -186,6 +198,63 @@ class P2EvaluationTest(unittest.TestCase):
             self.assertGreater(nearest, 0.0)
             self.assertGreater(farthest, nearest)
             self.assertLess(farthest, config["camera"]["depth_max_m"])
+
+    def test_repeatability_aggregation_keeps_missing_raw_detection_unknown(self):
+        def summary(run_id, apple_error, coke_success):
+            return {
+                "run_id": run_id,
+                "trial_id": "fixed",
+                "seed": 7,
+                "targets": ["apple", "coke_can"],
+                "startup_success": True,
+                "nav2_startup_success": True,
+                "navigation_success": True,
+                "scan_completed": True,
+                "failure_stage": "success",
+                "scorer_return_code": 0,
+                "base_task_score": 50.0 if not coke_success else 60.0,
+                "runtime_wall_seconds": 100.0,
+                "maximum_localization_error_m": apple_error,
+                "vision_score": 10.0 if not coke_success else 20.0,
+                "navigation_score": 40.0,
+                "classes": {
+                    "apple": {
+                        "TP": 1, "FP": 0, "FN": 0,
+                        "matches": [{"distance_m": apple_error}],
+                    },
+                    "coke_can": {
+                        "TP": int(coke_success), "FP": 0,
+                        "FN": int(not coke_success),
+                        "matches": ([{"distance_m": 0.04}] if coke_success else []),
+                    },
+                },
+                "objects": [
+                    {
+                        "class_name": "apple",
+                        "localization_pipeline_success": True,
+                        "entered_final_answer": True,
+                        "true_positive": True,
+                        "localization_error_m": apple_error,
+                    },
+                    {
+                        "class_name": "coke_can",
+                        "localization_pipeline_success": coke_success,
+                        "entered_final_answer": coke_success,
+                        "true_positive": coke_success,
+                        "localization_error_m": 0.04 if coke_success else None,
+                    },
+                ],
+            }
+
+        summaries = [summary("run_01", 0.09, False), summary("run_02", 0.08, True)]
+        aggregate = aggregate_summaries(summaries)
+        apple = aggregate["class_statistics"]["apple"]
+        coke = aggregate["class_statistics"]["coke_can"]
+        self.assertIsNone(coke["raw_detection_success_rate"])
+        self.assertEqual(coke["visual_stage_final_answer_success_rate"], 0.5)
+        self.assertAlmostEqual(apple["mean_localization_error_m"], 0.085)
+        self.assertEqual(aggregate["complete_runtime_success_rate"], 1.0)
+        self.assertEqual(repeatability_row(summaries[0])["apple_TP"], 1)
 
 
 if __name__ == "__main__":
