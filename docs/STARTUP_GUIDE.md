@@ -184,22 +184,40 @@ ros2 run robocup_home_robot scan_living_room
 ros2 run robocup_home_robot reinspect_far_object
 ```
 
-这些任务节点不要同时运行。当前分终端流程是开发验证流程，不等同于正式比赛的
-完整无人干预 runner。
+这些任务节点不要同时运行。当前分终端流程只用于开发验证。正式基础题使用单一
+无人干预入口：
+
+```bash
+ros2 launch robocup_home_robot formal_base_task.launch.py \
+  target_1:=apple \
+  target_2:=coke_can \
+  target_3:=banana \
+  group_number:=104 \
+  model_path:="$HOME/robocup_assets/training_runs/formal_objects_v1_yolo11n/weights/best.pt"
+```
+
+运行前必须替换三类名称和组号。完整参数与成功标准见
+[`FORMAL_BASE_RUNTIME.md`](FORMAL_BASE_RUNTIME.md)。
 
 ## 8. 加载老师下发的正式 world
 
-`work/formal-world-loader` 分支支持把绝对路径直接传给统一入口：
+正式基础题入口可直接接收老师下发的绝对路径：
 
 ```bash
-ros2 launch robocup_home_robot base_system.launch.py \
+ros2 launch robocup_home_robot formal_base_task.launch.py \
+  target_1:=apple target_2:=coke_can target_3:=banana \
+  group_number:=104 \
+  model_path:="$HOME/robocup_assets/training_runs/formal_objects_v1_yolo11n/weights/best.pt" \
   world_file:=/absolute/path/to/teacher_provided.world
 ```
 
 默认 Gazebo world 名称为 `robocup_home`。只有老师明确给出其他名称时才增加：
 
 ```bash
-ros2 launch robocup_home_robot base_system.launch.py \
+ros2 launch robocup_home_robot formal_base_task.launch.py \
+  target_1:=apple target_2:=coke_can target_3:=banana \
+  group_number:=104 \
+  model_path:="$HOME/robocup_assets/training_runs/formal_objects_v1_yolo11n/weights/best.pt" \
   world_file:=/absolute/path/to/teacher_provided.world \
   world_name:=documented_world_name
 ```

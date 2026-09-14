@@ -4,8 +4,8 @@
 
 This assessment uses the SEU 2026 school-competition rulebook v4, the supplied
 visual-technology recommendation, the teacher's formally released `models.zip`,
-the official scorer, repository state, and prior runtime evidence. The reviewed
-baseline is clean `main` at commit
+the official scorer, repository state, and prior runtime evidence. The
+integration branch started from clean `main` at commit
 `36e6da74aabc31d2f239687b28d8c34f54f94deb`.
 
 The base task is worth 70 points: 40 for autonomous navigation and 10 for each
@@ -34,19 +34,19 @@ ground truth to obtain corners or object positions.
   three true positives, no false positives, and maximum error 0.0746 m.
 - A fresh observation window, denser full-circle scan, final evidence filter,
   exact answer JSON, and persistent final RViz markers are implemented.
-- The default model still contains only two classes, while a formal run asks
-  for three classes. The current workflow also still needs manual staged
-  commands and has not passed randomized, no-intervention, eight-minute trials.
+- The generic localizer default still names the two pilot classes, while the
+  dedicated formal launch now requires an explicit 18-class checkpoint and
+  exactly three targets. Randomized, official-world, eight-minute trials have
+  not yet passed.
 
-Estimated base-task readiness is 55–65%. The navigation and two-class geometry
-chain are strong, but the current system is not a complete competition
+Estimated base-task readiness is 70–80%. One complete formal-model runtime has
+now passed, but one known layout is not yet a repeatable competition
 deliverable.
 
-That estimate describes the clean-`main` runtime baseline. Confirmation of the
-official 18-class asset set removes the P0 class-universe uncertainty and raises
-confidence in the trained model's scope, but it does not by itself raise
-end-to-end run readiness because the model is not yet integrated and P1/P2 are
-still open.
+That estimate describes the integrated formal runner on the known example
+layout. Confirmation of the official 18-class asset set and the completed P1
+control flow remove two structural blockers, while P2 randomized end-to-end
+verification remains open.
 
 ## Map/world and corners audit
 
@@ -136,9 +136,10 @@ unknown or ambiguous name.
 Provide one bounded runner that accepts exactly three judge target strings and
 a positive group number, resolves each target through an explicit
 normalization/alias map to a distinct canonical class, navigates, resets the
-observation window, scans, performs only evidence-driven reinspection, saves
-once, and exits within the base-task time budget. Reject unknown, ambiguous, or
-duplicate-after-normalization targets and fail closed when any stage fails.
+observation window, scans, saves once, and exits within the base-task time
+budget. Reject unknown, ambiguous, or duplicate-after-normalization targets
+and fail closed when any stage fails. Reinspection remains a later,
+evidence-driven addition rather than a mandatory first closure step.
 
 ### P2 — high-information scenario matrix
 
@@ -203,9 +204,31 @@ model selection unchanged.
 All five P0 success gates are complete for the synthetic first pass, and the
 canonical class set is now confirmed against the official `models.zip`. This
 is a model-development result, not evidence that all 18 classes will score
-equally well in the full competition world. Judge-input normalization remains
-a P1 interface task; P1 runner integration and P2 randomized end-to-end scoring
-remain required before this model replaces the pilot default.
+equally well in the full competition world.
+
+## P1 implementation evidence
+
+The `work/formal-base-runtime` branch now provides a fail-closed launch that
+requires the formal model path, exactly three distinct canonical or explicitly
+aliased target names, and a positive group number. It validates the model's
+class names and order against the official 18-class manifest before accepting
+detections, refuses to overwrite an existing answer, and verifies the saved
+objects-only JSON before reporting success.
+
+One full `example.world` run completed navigation, a fresh twelve-view scan,
+RGB-D localization, spatial deduplication, counting, and automatic answer save
+without operator input. The runner completed in 96 seconds and produced a
+strict three-key answer with `apple=1`, `coke_can=1`, and `banana=0`. This closes
+the requested P1 control-flow integration; P2 randomized official scoring is
+still required to establish repeatability and all-class competition accuracy.
+
+The follow-up `work/base-task-integration` branch combines that runner with the
+formal world loader. The formal launch now forwards `world_file` and
+`world_name` without inspecting scene contents. Its first absolute-path smoke
+exposed a startup race in which the action service existed before Nav2 was
+active; a narrow lifecycle-active gate fixed that integration issue. The
+repeat run completed the full unattended chain in 93.26 seconds and saved the
+same strict three-class result shape.
 
 ## Fair-play boundary
 

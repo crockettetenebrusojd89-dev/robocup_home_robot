@@ -63,3 +63,9 @@ LiDAR/odometry/IMU/RGB/depth/camera-info interfaces appeared, Nav2 reached the
 active state, AMCL loaded the saved map, and autonomous navigation from the
 start to the living room succeeded. The empty-path default also reached active
 Nav2. A nonexistent path failed before Gazebo started.
+
+On 2026-09-14, the combined formal base-task launch loaded the same
+`example.world` by absolute path and completed navigation, twelve-view scanning,
+RGB-D localization, deduplication, and automatic JSON save without intervention
+in 93.26 seconds. The launch only forwarded the path and world name; it did not
+read scene contents.

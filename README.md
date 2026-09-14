@@ -29,3 +29,9 @@ criteria must update the startup guide in the same branch or pull request.
 For verified capability boundaries and the latest handoff, see
 [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) and
 [`docs/HANDOFF.md`](docs/HANDOFF.md).
+
+## Formal base-task runtime
+
+The unattended navigation, three-class search, counting, and answer-JSON
+workflow is documented in
+[`docs/FORMAL_BASE_RUNTIME.md`](docs/FORMAL_BASE_RUNTIME.md).
