@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "scenario_id": "smoke_multitable_seed_20260914",
+  "seed": 20260914,
+  "group_number": 201,
+  "targets": ["apple", "coke_can", "banana"],
+  "placements": [
+    {"class_name": "apple", "table_id": "living_room_table_0"},
+    {"class_name": "coke_can", "table_id": "living_room_table_2"},
+    {"class_name": "banana", "table_id": "living_room_table_3"}
+  ]
+}

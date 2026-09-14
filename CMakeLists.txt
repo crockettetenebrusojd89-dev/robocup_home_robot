@@ -152,6 +152,16 @@ if(BUILD_TESTING)
     PROPERTIES ENVIRONMENT
       "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
   )
+  add_test(
+    NAME p2_evaluation
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_p2_eval.py
+  )
+  set_tests_properties(
+    p2_evaluation
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/tools/p2_eval"
+  )
 endif()
 
 ament_package()
