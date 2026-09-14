@@ -106,7 +106,12 @@ establish arm control, MoveIt2 planning, or visual grasping.
 - Calibration of the 8 cm final-dedup radius against official competition
   object spacing and randomized layouts beyond the provided scoring example.
 - Repeat trials with randomized object placement and temporary obstacles.
-- Direct corner-based validation of map/world calibration modes C0-C3.
+- Manual C0-C3 capture and official-scorer A/B validation. The code/history
+  audit found no prior corner configuration or runtime calibration. Current
+  spawn and AMCL start anchors imply only near alignment (about 6.1 cm anchor
+  separation and 0.233 degrees yaw difference), while objects-only identity
+  scoring has passed 20/20 at an explicit 0.10 m gate. Corners remain a P2
+  validation item, not an enabled runtime feature.
 - Manual RViz GUI inspection of the final-answer markers. Their ROS messages
   and exact equality with the saved JSON were verified.
 
@@ -116,7 +121,9 @@ establish arm control, MoveIt2 planning, or visual grasping.
    normalization/alias boundary, and group number into a fail-closed
    no-intervention base-task runner.
 2. Run randomized full-chain official scoring, including nearby same-class
-   objects, temporary obstacles, occlusion, corners, and the eight-minute cap.
+   objects, temporary obstacles, occlusion, and the eight-minute cap. Within
+   this P2 work, manually capture C0-C3 and A/B test objects-only against
+   corners-plus-objects before deciding whether to integrate calibration.
 3. Use those failures to improve model generalization, localization, search,
    or deduplication one justified change at a time.
 4. Manipulation and grasping afterwards.

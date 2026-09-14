@@ -46,7 +46,7 @@ def generate_launch_description():
         executable='create',
         output='screen',
         arguments=[
-            '-world', 'robocup_home',
+            '-world', LaunchConfiguration('world_name'),
             '-name', 'robocup_home_robot',
             '-string', Command([spawn_sdf_generator, ' ', xacro_file]),
             '-x', LaunchConfiguration('x'),
@@ -89,7 +89,11 @@ def generate_launch_description():
     )
 
     load_sensors_system = ExecuteProcess(
-        cmd=[sensors_loader],
+        cmd=[
+            sensors_loader,
+            '--world-name',
+            LaunchConfiguration('world_name'),
+        ],
         name='load_sensors_system',
         output='screen',
     )
@@ -102,6 +106,11 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'world_name',
+            default_value='robocup_home',
+            description='Gazebo world name used for spawning and sensor services.',
+        ),
         DeclareLaunchArgument(
             'x',
             default_value='-4.8523360944520624',

@@ -27,6 +27,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(robot_share, 'launch', 'navigation.launch.py')
         ),
+        launch_arguments={
+            'world_file': LaunchConfiguration('world_file'),
+            'world_name': LaunchConfiguration('world_name'),
+        }.items(),
     )
 
     wait_for_vision = ExecuteProcess(
@@ -73,13 +77,23 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument(
+            'world_file',
+            default_value='',
+            description='Optional competition .world path; empty uses example.',
+        ),
+        DeclareLaunchArgument(
+            'world_name',
+            default_value='robocup_home',
+            description='Gazebo world name inside the supplied file.',
+        ),
+        DeclareLaunchArgument(
             'start_vision',
             default_value='true',
             description='Start the combined YOLO and RGB-D localizer.',
         ),
         LogInfo(
             msg=(
-                'Starting example world, one robot, Nav2, AMCL, RViz, '
+                'Starting the selected world, one robot, Nav2, AMCL, RViz, '
                 'and the vision readiness check. No motion task is started.'
             )
         ),
