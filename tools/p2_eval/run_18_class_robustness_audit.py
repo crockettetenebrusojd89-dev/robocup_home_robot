@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -19,7 +20,6 @@ from p2_eval_core import EvaluationConfigError
 from p2_eval_core import legal_center_half_extents
 from p2_eval_core import load_table_config
 from run_tabletop_robustness_gate import _associated
-from run_tabletop_robustness_gate import _boxes
 from run_tabletop_robustness_gate import _camera_model
 from run_tabletop_robustness_gate import _distribution
 from run_tabletop_robustness_gate import _manifest_records
@@ -225,6 +225,34 @@ def classify(success_rate: float) -> str:
     return "weak"
 
 
+def _all_boxes(result) -> list[dict[str, Any]]:
+    """Return every detector box with its official class identity."""
+    values = []
+    if result.boxes is None:
+        return values
+    for box in result.boxes:
+        class_id = int(box.cls[0].item())
+        x1, y1, x2, y2 = (float(value) for value in box.xyxy[0].tolist())
+        values.append({
+            "class_id": class_id,
+            "class_name": str(result.names[class_id]),
+            "confidence": float(box.conf[0].item()),
+            "bbox_xyxy": [x1, y1, x2, y2],
+            "bbox_width_px": x2 - x1,
+            "bbox_height_px": y2 - y1,
+            "bbox_area_px2": (x2 - x1) * (y2 - y1),
+        })
+    return values
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def analyze(
     manifest_path: Path,
     model_path: Path,
@@ -232,7 +260,13 @@ def analyze(
     output: Path,
     class_order: Sequence[str],
 ) -> dict[str, Any]:
-    records = _manifest_records(manifest_path)
+    selected_names = set(class_order)
+    records = [
+        record for record in _manifest_records(manifest_path)
+        if record["class_name"] in selected_names
+    ]
+    if not records:
+        raise EvaluationConfigError("capture has no records for selected classes")
     model = YOLO(str(model_path))
     names = [str(model.names[index]) for index in range(len(model.names))]
     missing = sorted(set(class_order) - set(names))
@@ -254,7 +288,25 @@ def analyze(
             if record["truth_visible"]
             else None
         )
-        boxes = _associated(_boxes(result, record["class_name"]), truth)
+        all_boxes = _all_boxes(result)
+        boxes = _associated(
+            [box for box in all_boxes if box["class_name"] == record["class_name"]],
+            truth,
+        )
+        formal_boxes = [
+            box for box in all_boxes
+            if box["confidence"] >= FORMAL_CONFIDENCE
+        ]
+        associated_formal = _associated(formal_boxes, truth)
+        correct_formal = [
+            box for box in associated_formal
+            if box["class_name"] == record["class_name"]
+        ]
+        wrong_formal = [
+            box for box in formal_boxes
+            if box["class_name"] != record["class_name"]
+        ]
+        associated_wrong = _associated(wrong_formal, truth)
         key = record["placement_id"]
         entry = per_placement.setdefault(key, {
             "placement_id": key,
@@ -270,14 +322,32 @@ def analyze(
             "visible_frame_count": 0,
             "detection_count_ge_0_50": 0,
             "candidate_boxes": [],
+            "wrong_class_detections": [],
+            "wrong_class_detection_frame_count": 0,
+            "duplicate_same_frame_count": 0,
         })
         entry["frame_count"] += 1
         entry["visible_frame_count"] += bool(record["truth_visible"])
-        entry["detection_count_ge_0_50"] += sum(
-            box["confidence"] >= FORMAL_CONFIDENCE for box in boxes
-        )
+        entry["detection_count_ge_0_50"] += len(correct_formal)
+        if wrong_formal:
+            entry["wrong_class_detection_frame_count"] += 1
+            for box in wrong_formal:
+                entry["wrong_class_detections"].append({
+                    "image": record["image"],
+                    "viewpoint": record["viewpoint"],
+                    "yaw_index": record["yaw_index"],
+                    "associated_with_target": box in associated_wrong,
+                    **box,
+                })
+        if len(correct_formal) > 1:
+            entry["duplicate_same_frame_count"] += 1
         if boxes:
-            entry["candidate_boxes"].append(boxes[0])
+            entry["candidate_boxes"].append({
+                **boxes[0],
+                "image": record["image"],
+                "viewpoint": record["viewpoint"],
+                "yaw_index": record["yaw_index"],
+            })
         if index % 200 == 0 or index == len(records):
             print(f"INFERENCE {index}/{len(records)}", flush=True)
 
@@ -292,6 +362,14 @@ def analyze(
         )
         entry["best_bbox"] = best
         entry["detected"] = entry["detection_count_ge_0_50"] > 0
+        entry["physically_visible"] = entry["visible_frame_count"] > 0
+        entry["wrong_class_fp"] = bool(entry["wrong_class_detections"])
+        entry["duplicate_same_frame_detection"] = (
+            entry["duplicate_same_frame_count"] > 0
+        )
+        entry["approximate_distance_m"] = _nearest_viewpoint_distance(
+            entry["world_position_m"]["x"], entry["world_position_m"]["y"]
+        )
         placements.append(entry)
 
     classes = {}
@@ -332,12 +410,22 @@ def analyze(
                 float(np.median([box["bbox_area_px2"] for box in best_boxes]))
                 if best_boxes else 0.0
             ),
+            "wrong_class_fp_placement_count": sum(
+                item["wrong_class_fp"] for item in selected
+            ),
+            "wrong_class_detection_count": sum(
+                len(item["wrong_class_detections"]) for item in selected
+            ),
+            "duplicate_same_frame_placement_count": sum(
+                item["duplicate_same_frame_detection"] for item in selected
+            ),
             "worst_position": worst,
             "placements": selected,
         }
     summary = {
         "schema_version": 1,
         "model_path": str(model_path.resolve()),
+        "model_sha256": _sha256(model_path),
         "device": device,
         "formal_confidence": FORMAL_CONFIDENCE,
         "diagnostic_confidence": DIAGNOSTIC_CONFIDENCE,
@@ -352,6 +440,15 @@ def analyze(
             band: [name for name in class_order if classes[name]["band"] == band]
             for band in ("stable", "borderline", "weak")
         },
+        "wrong_class_fp_placement_count": sum(
+            item["wrong_class_fp"] for item in placements
+        ),
+        "wrong_class_detection_count": sum(
+            len(item["wrong_class_detections"]) for item in placements
+        ),
+        "duplicate_same_frame_placement_count": sum(
+            item["duplicate_same_frame_detection"] for item in placements
+        ),
         "isolation": (
             "YOLO received RGB image paths only. Gazebo labels and placement "
             "coordinates were used only after inference for offline association."
@@ -399,6 +496,14 @@ def main(argv=None) -> int:
     parser.add_argument("--classes", nargs="*")
     parser.add_argument("--device", default="0")
     parser.add_argument("--analyze-only", action="store_true")
+    parser.add_argument(
+        "--reuse-capture-dir",
+        type=Path,
+        help=(
+            "Analyze an immutable prior competition-domain capture into a new "
+            "output directory without replacing its original summary."
+        ),
+    )
     args = parser.parse_args(argv)
     started = time.monotonic()
     try:
@@ -410,17 +515,41 @@ def main(argv=None) -> int:
             item["name"]: int(item["gazebo_label"])
             for item in class_document["classes"]
         }
-        selected_classes = args.classes or official_classes
+        reuse_design = None
+        if args.reuse_capture_dir:
+            reuse_design = _read_json(args.reuse_capture_dir / "design.json")
+            captured_classes = reuse_design.get("classes") or list(dict.fromkeys(
+                item["class_name"] for item in reuse_design["placements"]
+            ))
+            selected_classes = args.classes or captured_classes
+        else:
+            selected_classes = args.classes or official_classes
         unknown = sorted(set(selected_classes) - set(official_classes))
         if unknown:
             raise EvaluationConfigError(f"unknown classes: {unknown}")
-        if args.phase == "representative" and args.classes:
-            raise EvaluationConfigError(
-                "representative phase always audits all formal classes"
-            )
-        if args.phase == "expanded" and not args.classes:
+        if not args.reuse_capture_dir and args.phase == "expanded" and not args.classes:
             raise EvaluationConfigError("expanded phase requires --classes")
-        if args.analyze_only:
+        if args.reuse_capture_dir and args.analyze_only:
+            raise EvaluationConfigError(
+                "--reuse-capture-dir and --analyze-only are mutually exclusive"
+            )
+        if args.reuse_capture_dir:
+            if args.output_dir.exists():
+                raise EvaluationConfigError(
+                    f"output directory already exists: {args.output_dir}"
+                )
+            if not (args.reuse_capture_dir / "frames.tsv").is_file():
+                raise EvaluationConfigError(
+                    "--reuse-capture-dir requires a complete frames.tsv"
+                )
+            args.output_dir.mkdir(parents=True)
+            _write_json(args.output_dir / "design.json", {
+                **reuse_design,
+                "capture_source": str(args.reuse_capture_dir.resolve()),
+                "reanalyzed_classes": list(selected_classes),
+            })
+            manifest_path = args.reuse_capture_dir / "frames.tsv"
+        elif args.analyze_only:
             if not (args.output_dir / "frames.tsv").is_file():
                 raise EvaluationConfigError(
                     "--analyze-only requires an existing frames.tsv"
@@ -454,15 +583,18 @@ def main(argv=None) -> int:
                 package_root / "tools/p2_eval/tabletop_gate_capture_worker.cpp",
                 args.model_resources,
             )
+            manifest_path = args.output_dir / "frames.tsv"
+        if args.analyze_only:
+            manifest_path = args.output_dir / "frames.tsv"
         design = _read_json(args.output_dir / "design.json")
         summary = analyze(
-            args.output_dir / "frames.tsv",
+            manifest_path,
             args.model,
             args.device,
             args.output_dir,
-            design["classes"],
+            selected_classes,
         )
-        summary["phase"] = design["phase"]
+        summary["phase"] = design.get("phase", "reused_capture")
         summary["wall_seconds"] = time.monotonic() - started
         _write_json(args.output_dir / "summary.json", summary)
         print(json.dumps(summary, indent=2))

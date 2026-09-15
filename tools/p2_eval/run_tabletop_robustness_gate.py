@@ -37,6 +37,19 @@ TARGET_TABLES = {
 DIAGNOSTIC_CONFIDENCE = 0.001
 FORMAL_CONFIDENCE = 0.50
 YAW_SAMPLE_DEGREES = 15
+RENDER_RESOURCE_ERROR_MARKERS = (
+    "Unable to find file with URI",
+    "Cannot load null mesh",
+    "Failed to load geometry for visual",
+)
+
+
+def render_resource_failures(log_text: str) -> list[str]:
+    """Return render-resource failures that invalidate visual evidence."""
+    return [
+        marker for marker in RENDER_RESOURCE_ERROR_MARKERS
+        if marker in log_text
+    ]
 
 
 def _read_json(path: Path) -> Any:
@@ -304,6 +317,15 @@ def capture(
                     )
             finally:
                 stop_process(gazebo)
+        gazebo_log = (output / "gazebo.log").read_text(
+            encoding="utf-8", errors="replace"
+        )
+        failures = render_resource_failures(gazebo_log)
+        if failures:
+            raise RuntimeError(
+                "Gazebo visual evidence is invalid because rendering resources "
+                f"were missing: {failures}"
+            )
 
 
 def _boxes(result, class_name: str):

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 from p2_eval_core import EvaluationConfigError
 from p2_eval_core import generate_trial
@@ -21,6 +22,10 @@ from run_trial import build_runtime_command
 from run_trial import build_scorer_command
 from run_repeatability import aggregate_summaries
 from run_repeatability import repeatability_row
+from run_lighting_robustness_gate import apply_lighting_profile
+from run_lighting_robustness_gate import build_design as build_lighting_design
+from run_lighting_robustness_gate import load_profiles
+from run_tabletop_robustness_gate import render_resource_failures
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -314,6 +319,64 @@ class P2EvaluationTest(unittest.TestCase):
             self.assertGreater(nearest, 0.0)
             self.assertGreater(farthest, nearest)
             self.assertLess(farthest, config["camera"]["depth_max_m"])
+
+    def test_lighting_gate_is_exactly_48_controlled_trials(self):
+        profiles = load_profiles(
+            PACKAGE_ROOT / "tools/formal_dataset/config/v2_formal.json"
+        )
+        class_document = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        labels = {
+            item["name"]: item["gazebo_label"]
+            for item in class_document["classes"]
+        }
+        design = build_lighting_design(
+            load_table_config(TABLE_CONFIG),
+            ("banana", "beer", "master_chef_can", "coke_can"),
+            labels,
+            profiles,
+        )
+        self.assertEqual(design["trial_count"], 48)
+        self.assertEqual(len(design["placements"]), 12)
+        for class_name in design["classes"]:
+            selected = [
+                item for item in design["placements"]
+                if item["class_name"] == class_name
+            ]
+            self.assertEqual(len(selected), 3)
+            self.assertEqual(
+                {item["scenario_id"] for item in selected},
+                {"A_mid", "B_far", "C_edge_problem_yaw"},
+            )
+
+    def test_lighting_profile_replaces_world_light_without_geometry_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            world_path = self._base_world(Path(temporary))
+            tree = ET.parse(world_path)
+            world = tree.getroot().find("world")
+            ET.SubElement(world, "light", {"name": "old", "type": "point"})
+            tree.write(world_path, encoding="utf-8")
+            profiles = load_profiles(
+                PACKAGE_ROOT / "tools/formal_dataset/config/v2_formal.json"
+            )
+            apply_lighting_profile(world_path, profiles["dim"])
+            updated = ET.parse(world_path).getroot().find("world")
+            self.assertIsNotNone(updated.find("model[@name='floor']"))
+            self.assertEqual(
+                [light.get("name") for light in updated.findall("light")],
+                ["sun", "ambient_fill"],
+            )
+            self.assertEqual(
+                updated.findtext("scene/ambient"), "0.18 0.18 0.18 1"
+            )
+
+    def test_missing_render_resources_fail_the_visual_gate_closed(self):
+        self.assertEqual(render_resource_failures("all resources loaded"), [])
+        self.assertEqual(
+            render_resource_failures(
+                "Unable to find file with URI model://missing/table.dae"
+            ),
+            ["Unable to find file with URI"],
+        )
 
     def test_repeatability_aggregation_keeps_missing_raw_detection_unknown(self):
         def summary(run_id, apple_error, coke_success):

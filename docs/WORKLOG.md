@@ -223,3 +223,58 @@ epoch-40 backup only if needed. Do not start a second training run.
   initial subset report exposed and preserved an mAP50-95 class-index bug; the
   corrected implementation has a missing-class regression test and all five
   checkpoint reports were regenerated.
+
+## 2026-09-16 — Formal Model V2 competition-domain external detector gate
+
+### Goal
+
+Decide whether human epoch 31 can replace V1 and be frozen, using the fixed
+confidence-0.50 P1/P2 spatial, lighting, stable-class, and FP gates. Stop
+before runtime integration or any further training.
+
+### Done
+
+- Verified branch, remote, candidate/backup hashes, frozen viewpoints, and the
+  targeted aggregate definition.
+- Added checkpoint-preserving capture reuse, full wrong-class/duplicate
+  evidence, a 48-trial four-profile lighting gate, and fail-closed Gazebo
+  render-resource validation.
+- Ran all required main-candidate spatial, lighting, and stable gates plus the
+  permitted banana-only epoch40 A/B. Repeated invalid older 18-class captures
+  with complete resources after manual review found missing table meshes.
+
+### Results
+
+- Epoch31 spatial results were banana 2/15, beer 15/15, master 15/15, coke
+  15/15, pudding 15/15, and tomato 15/15. Banana remained equal to its V1
+  baseline; beer and master improved strongly.
+- Lighting correct-target detection was 12/12 for banana, beer, master, and
+  coke with no confidence collapse, but background FP signatures were
+  profile-dependent and master target confusion persisted.
+- Stable-12 was 5/5 except tuna 4/5. Epoch40 improved banana only to 4/15 and
+  also failed. Epoch31 therefore failed the external detector gate and is not
+  approved for replacement or freeze.
+
+### Problem Updates
+
+- P-001 remains **OPEN**: systematic banana misses and wrong-class FP behavior
+  block detector freeze and downstream integration.
+- P-009 is **SOLVED**: incomplete render-resource scenes now fail closed and
+  all verdict evidence uses fresh zero-error Gazebo captures.
+- P-002 through P-008 are otherwise unchanged.
+
+### Next
+
+Stop this work. Before downstream integration, authorize and define one bounded
+competition-domain correction for banana and cross-class/background FP, then
+rerun the identical gate. Do not start a blind V3, broad checkpoint sweep, or
+unrelated runtime work.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting HEAD `d004b99`.
+- Commit: the commit containing this entry.
+- Validation: 17 focused P2 tests passed; four edited Python files passed
+  `ament_flake8`; `git diff --check` passed; all accepted Gazebo evidence logs
+  had zero missing-resource/geometry errors. Full evidence is in
+  `docs/FORMAL_MODEL_V2_EXTERNAL_GATE_2026-09-16.md`.

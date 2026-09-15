@@ -384,3 +384,41 @@ gates, targeted quotas, and zero exact, annotation-aware perceptual, or targeted
 scene-group train/val leakage. Ultralytics accepted `data.yaml` with 18 classes
 and the expected train/val roots. No checkpoint was loaded and no training or
 runtime change was performed.
+
+## Formal Model V2 competition-domain external gate, 2026-09-16
+
+Human epoch 31 failed the frozen detector gate. Corrected beer and
+master_chef_can improved to 15/15, and coke_can, pudding_box, and
+tomato_soup_can were also 15/15, but banana remained 2/15 on the identical
+historical problem-yaw capture. The stable screen was 5/5 for 11 classes and
+4/5 for tuna_fish_can. The four focus classes each reached 12/12 correct-target
+detections across normal, bright, dim, and warm-side lighting with no
+confidence collapse, but profile-dependent background false detections and
+target-overlap cross-class detections were systematic. Epoch40 improved banana
+only to 4/15 and also failed.
+
+Manual review also invalidated the older `formal_18_class_*` evidence trees:
+their Gazebo logs contain missing room-mesh errors. Fresh resource-complete
+captures were used for the verdict, and the capture harness now fails closed
+on missing render resources. Full protocol, metrics, FP evidence, lighting
+parameters, representative images, and the decision are in
+`docs/FORMAL_MODEL_V2_EXTERNAL_GATE_2026-09-16.md`.
+
+## Formal Model V2 competition-domain external gate, 2026-09-16
+
+Human epoch 31 failed the frozen detector gate. Corrected beer and
+master_chef_can improved to 15/15, and coke_can, pudding_box, and
+tomato_soup_can were also 15/15, but banana remained 2/15 on the identical
+historical problem-yaw capture. The stable screen was 5/5 for 11 classes and
+4/5 for tuna_fish_can. The four focus classes each reached 12/12 correct-target
+detections across normal, bright, dim, and warm-side lighting with no
+confidence collapse, but profile-dependent background false detections and
+target-overlap cross-class detections were systematic. Epoch40 improved banana
+only to 4/15 and also failed.
+
+Manual review also invalidated the older `formal_18_class_*` evidence trees:
+their Gazebo logs contain missing room-mesh errors. Fresh resource-complete
+captures were used for the verdict, and the capture harness now fails closed
+on missing render resources. Full protocol, metrics, FP evidence, lighting
+parameters, representative images, and the decision are in
+`docs/FORMAL_MODEL_V2_EXTERNAL_GATE_2026-09-16.md`.

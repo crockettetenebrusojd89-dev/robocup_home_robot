@@ -2,20 +2,21 @@
 
 ## Last Updated
 
-2026-09-15
+2026-09-16
 
 ## Current Stage
 
 P2 robustness work for the 70-point autonomous navigation and visual counting
-task. One Formal Model V2 fine-tune and synthetic candidate selection are
-complete; the unchanged competition-domain Gazebo gate is now the critical
-next decision.
+task. The Formal Model V2 competition-domain external detector gate is
+complete and failed; detector replacement and freeze remain blocked on
+systematic banana misses and wrong-class FP behavior.
 
 ## Current Goal
 
-Run the selected epoch-31 Formal Model V2 candidate through the unchanged P1/P2
-Gazebo external gate, using the epoch-40 best checkpoint only as a backup and
-without tuning the frozen competition runtime parameters.
+Keep P-001 scoped to the smallest competition-domain correction for banana and
+cross-class/background detector FPs. Do not start runtime integration, 3D
+localization, deduplication tuning, a broad checkpoint sweep, or unrelated
+competition work until the detector gate is rerun.
 
 ## Open Problems
 
@@ -23,22 +24,20 @@ without tuning the frozen competition runtime parameters.
 
 - **Status:** OPEN
 - **Priority:** CRITICAL
-- **Problem:** The current checkpoint is unreliable for corrected beer,
-  banana, and master_chef_can; three additional classes are borderline.
-- **Key evidence:** The competition-like audit remains banana 2/15, corrected
-  beer 0/15, and master_chef_can 8/15 for V1. One 40-epoch V2 fine-tune from V1
-  completed on the validated 2,700-image dataset. The selected epoch-31
-  checkpoint has targeted recalls .973/1.000/1.000 for banana/beer/master,
-  1.000/.979/.949 for coke/pudding/tomato, targeted mAP50-95 .908, and zero
-  detections on 10/10 negatives at confidence 0.50. Its stable-12 legacy macro
-  recall/mAP50/mAP50-95 are .987/.989/.954 versus V1 .979/.987/.931, with no
-  per-class decrease beyond 2 percentage points. Evidence and hashes are in
-  `docs/FORMAL_MODEL_V2_TRAINING_2026-09-15.md`.
-- **Next step:** Run
-  `formal_objects_v2_yolo11n_finetune/weights/epoch30.pt` (human epoch 31,
-  SHA256 `c16f5332...564c`) through the frozen P1/P2 external gate first. Use
-  epoch-40 `best.pt` only if the main result is ambiguous or fails; do not
-  retrain from `yolo11n.pt` automatically.
+- **Problem:** The selected V2 checkpoint is still unreliable for banana and
+  produces systematic target-confusion and lighting-dependent background FPs.
+- **Key evidence:** At confidence 0.50 and frozen P1/P2, epoch31 achieved
+  banana 2/15, corrected beer 15/15, master_chef_can 15/15, and all three
+  borderline classes 15/15. Stable classes were 5/5 except tuna_fish_can 4/5.
+  All four lighting focus classes were 12/12 with no confidence collapse, but
+  every lighting trial had a repeatable background wrong-class box and master
+  had target-overlap confusion in 8/12 trials. Epoch40 reached only banana
+  4/15 in the identical A/B. Full evidence is in
+  `docs/FORMAL_MODEL_V2_EXTERNAL_GATE_2026-09-16.md`.
+- **Next step:** Do not freeze or integrate either V2 checkpoint. Use the
+  preserved competition-domain failures to define one bounded banana and
+  wrong-class-FP correction, then rerun the identical spatial, lighting, and
+  stable gates without changing confidence or viewpoints.
 
 ### P-002 — Competition-like full-chain reliability is not established
 
@@ -126,10 +125,25 @@ without tuning the frozen competition runtime parameters.
 - **Next step:** Do not tune viewpoints again from this evidence alone; reopen
   as `REGRESSED` only if broader layouts demonstrate coverage failures.
 
+### P-009 — External audit accepted scenes with missing render resources
+
+- **Status:** SOLVED
+- **Priority:** HIGH
+- **Problem:** Older 18-class audit captures silently continued after Gazebo
+  failed to load room table/furniture meshes, making their tabletop evidence
+  invalid.
+- **Key evidence:** Each affected log contained 60 missing-resource/geometry
+  errors and manual images showed floating objects. Fresh valid capture logs
+  contain zero such errors. The shared capture layer now rejects three Gazebo
+  missing-resource signatures before producing a valid result; focused tests
+  cover the fail-closed rule.
+- **Next step:** Preserve the older trees as invalid evidence and require the
+  resource-complete capture path for every future visual gate.
+
 ## Next Step
 
-Work on P-001 only: run the selected epoch-31 V2 candidate through the
-unchanged confidence-0.50 P1/P2 robustness audit. Do not alter
-confidence 0.50, depth/TF, online or final deduplication, final confirmation,
-Nav2, corner handling, FR3/MoveIt, or the candidate viewpoints as part of this
-model correction.
+Stop this completed gate work. P-001 remains the only next model task: plan one
+bounded competition-domain correction for the systematic banana and FP
+failures, then rerun the same confidence-0.50 P1/P2 and lighting evidence. Do
+not start V2 runtime integration, depth/TF, deduplication, Nav2, FR3/MoveIt, or
+a broad retraining/checkpoint sweep before that decision.
