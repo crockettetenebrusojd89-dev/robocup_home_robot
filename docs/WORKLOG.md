@@ -162,3 +162,64 @@ unchanged confidence-0.50 P1/P2 audit. Do not start training automatically.
   passed (13 dataset, 9 dedup, 14 P2, 6 world-loader, 13 runtime); four edited
   Python files passed `ament_flake8` and syntax compilation; `git diff --check`
   passed.
+
+## 2026-09-15 — Formal Model V2 fine-tune and candidate selection
+
+### Goal
+
+Address the synthetic-training portion of P-001 with one conservative V2
+fine-tune, partitioned validation, and one main plus at most one backup
+checkpoint; stop before the competition-domain Gazebo gate.
+
+### Done
+
+- Audited the existing CUDA training environment, V1 checkpoint identity and
+  18-class order, final V2 composition, disk capacity, and GPU memory.
+- Added explicit fine-tune controls and structured provenance to the existing
+  trainer, plus a symlink-only data view that prevents loader cache writes to
+  the composed source dataset.
+- Added and regression-tested a minimal evaluator for overall, legacy,
+  targeted-positive, and confidence-0.50 negative subsets.
+- Passed one 1-epoch smoke and then completed the only formal 40-epoch AdamW
+  fine-tune from V1. Evaluated V1 and human epochs 21, 31, 36, and 40.
+
+### Results
+
+- Formal training completed 40/40 epochs in 639.06 seconds without OOM; best
+  was epoch 40. Train and validation losses declined together, with no obvious
+  synthetic overfit signal.
+- Human epoch 31 was selected over the default best: targeted weak-class
+  recalls were .973/1.000/1.000 for banana/beer/master, all three borderline
+  recalls were at least .949, targeted mAP50-95 was .908, and 10/10 negatives
+  had zero detections at confidence 0.50.
+- Stable-12 legacy macro recall/mAP50/mAP50-95 improved from
+  .979/.987/.931 (V1) to .987/.989/.954; no stable per-class metric crossed the
+  -2 percentage-point regression line.
+- Main SHA256 is `c16f5332...564c` (`epoch30.pt`, human epoch 31). Epoch-40
+  `best.pt`, SHA256 `0aa4fc50...906a`, is the only backup. Full evidence is in
+  `docs/FORMAL_MODEL_V2_TRAINING_2026-09-15.md` and the external corrected
+  evaluation tree recorded there.
+
+### Problem Updates
+
+- P-001 remains **OPEN**. Synthetic model evidence is strong enough to advance,
+  but the unchanged P1/P2 competition-domain gate must confirm V2 can replace
+  V1.
+- P-002 through P-008 are unchanged. No runtime, confidence, navigation,
+  viewpoint, localization, deduplication, FR3, or MoveIt setting changed.
+
+### Next
+
+Run the epoch-31 main candidate through the frozen P1/P2 external gate. Use the
+epoch-40 backup only if needed. Do not start a second training run.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`
+- Commit: the commit containing this entry; starting HEAD `604bf75`
+- Validation: final V2 validator passed; 17 focused dataset/evaluator tests
+  passed; three training/evaluation scripts passed syntax compilation; four
+  edited Python files passed `ament_flake8`; `git diff --check` passed. One
+  initial subset report exposed and preserved an mAP50-95 class-index bug; the
+  corrected implementation has a missing-class regression test and all five
+  checkpoint reports were regenerated.

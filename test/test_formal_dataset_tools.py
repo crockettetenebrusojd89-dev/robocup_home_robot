@@ -12,6 +12,7 @@ import zipfile
 
 import generate_dataset
 import compose_dataset_v2
+import evaluation_core
 import prepare_v2_assets
 import validate_dataset
 import v2_common
@@ -239,6 +240,98 @@ class FormalDatasetToolsTest(unittest.TestCase):
             path = Path(temporary) / 'negative.txt'
             path.write_text('', encoding='utf-8')
             self.assertEqual(validate_dataset._read_boxes(path, set(range(18))), [])
+
+    def test_dataset_view_uses_symlinks_and_preserves_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / 'source'
+            for kind in ('images', 'labels'):
+                for split in ('train', 'val'):
+                    directory = dataset / kind / split
+                    directory.mkdir(parents=True)
+                    suffix = '.png' if kind == 'images' else '.txt'
+                    (directory / f'sample{suffix}').write_text(
+                        f'{kind}-{split}', encoding='utf-8'
+                    )
+            (dataset / 'classes.json').write_text(
+                json.dumps({'classes': self.classes}), encoding='utf-8'
+            )
+            before = sorted(str(path.relative_to(dataset)) for path in dataset.rglob('*'))
+            data_yaml = evaluation_core.create_dataset_view(dataset, root / 'view')
+            after = sorted(str(path.relative_to(dataset)) for path in dataset.rglob('*'))
+            self.assertEqual(before, after)
+            self.assertTrue((root / 'view/images/train/sample.png').is_symlink())
+            self.assertEqual(
+                json.loads(data_yaml.read_text())['path'], str((root / 'view').resolve())
+            )
+
+    def test_subset_reader_maps_to_view_and_rejects_duplicates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / 'source'
+            view = root / 'view'
+            for base in (dataset, view):
+                image = base / 'images' / 'val' / 'one.png'
+                image.parent.mkdir(parents=True)
+                image.touch()
+            subset = root / 'subset.txt'
+            subset.write_text('images/val/one.png\n', encoding='utf-8')
+            self.assertEqual(
+                evaluation_core.load_subset_images(dataset, subset, view),
+                [view.resolve() / 'images' / 'val' / 'one.png'],
+            )
+            subset.write_text(
+                'images/val/one.png\nimages/val/one.png\n', encoding='utf-8'
+            )
+            with self.assertRaisesRegex(ValueError, 'duplicate'):
+                evaluation_core.load_subset_images(dataset, subset, view)
+
+    def test_negative_detection_summary_records_class_and_confidence(self):
+        class FakeValues:
+            def __init__(self, values):
+                self.values = values
+
+            def tolist(self):
+                return self.values
+
+        class FakeBoxes:
+            cls = FakeValues([2.0, 1.0])
+            conf = FakeValues([0.75, 0.51])
+
+        class FakeResult:
+            path = '/tmp/negative.png'
+            boxes = FakeBoxes()
+
+        summary = evaluation_core.negative_detection_document(
+            [FakeResult()], {1: 'banana', 2: 'beer'}, 10
+        )
+        self.assertEqual(summary['detection_count'], 2)
+        self.assertEqual(summary['images_with_detections'], 1)
+        self.assertEqual(summary['detections'][0]['class_name'], 'beer')
+        self.assertEqual(summary['detections'][1]['confidence'], 0.51)
+
+    def test_subset_map50_95_uses_class_id_when_a_class_is_absent(self):
+        class Box:
+            p = [0.8, 0.9]
+            r = [0.7, 0.95]
+            ap50 = [0.75, 0.97]
+            maps = [0.61, 0.22, 0.88]
+            mp = 0.85
+            mr = 0.825
+            map50 = 0.86
+            map = 0.745
+
+        class Metrics:
+            box = Box()
+            ap_class_index = [0, 2]
+            names = {0: 'apple', 1: 'banana', 2: 'beer'}
+            nt_per_class = [1, 0, 2]
+
+        document = evaluation_core.metrics_document(Metrics(), 3)
+        by_name = {item['name']: item for item in document['per_class']}
+        self.assertEqual(by_name['apple']['map50_95'], 0.61)
+        self.assertIsNone(by_name['banana']['map50_95'])
+        self.assertEqual(by_name['beer']['map50_95'], 0.88)
 
     def test_composition_removes_whole_beer_images_and_preserves_sources(self):
         with tempfile.TemporaryDirectory() as temporary:

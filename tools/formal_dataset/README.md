@@ -169,6 +169,15 @@ CUDA, and GPU identity used. The CUDA training environment is intentionally
 separate from `~/robocup_vision_venv`; this offline operation does not mutate
 the known-good runtime environment or change the runtime model path.
 
+For V2 fine-tuning, pass every optimizer, schedule, augmentation, checkpoint,
+and symlink-only `--data-view` input explicitly. The data view keeps
+Ultralytics label caches outside the composed source dataset. Use
+`scripts/evaluate_model.py` afterward to record overall, legacy,
+targeted-positive, and confidence-0.50 negative results separately. The exact
+2026-09-15 invocation, parameters, checkpoint hashes, subset metrics, and
+candidate decision are recorded in
+[`../../docs/FORMAL_MODEL_V2_TRAINING_2026-09-15.md`](../../docs/FORMAL_MODEL_V2_TRAINING_2026-09-15.md).
+
 ## Safety boundary
 
 This tool may use Gazebo labels and model poses because it is an offline

@@ -7,14 +7,15 @@
 ## Current Stage
 
 P2 robustness work for the 70-point autonomous navigation and visual counting
-task. One full formal-model run is integrated, and randomized evaluation has
-identified model generalization as the immediate blocker.
+task. One Formal Model V2 fine-tune and synthetic candidate selection are
+complete; the unchanged competition-domain Gazebo gate is now the critical
+next decision.
 
 ## Current Goal
 
-Train and re-audit one unified 18-class Formal Model V2 checkpoint from the
-completed, validated 2,700-image dataset, but only after explicit approval and
-without changing the frozen competition runtime parameters.
+Run the selected epoch-31 Formal Model V2 candidate through the unchanged P1/P2
+Gazebo external gate, using the epoch-40 best checkpoint only as a backup and
+without tuning the frozen competition runtime parameters.
 
 ## Open Problems
 
@@ -24,19 +25,20 @@ without changing the frozen competition runtime parameters.
 - **Priority:** CRITICAL
 - **Problem:** The current checkpoint is unreliable for corrected beer,
   banana, and master_chef_can; three additional classes are borderline.
-- **Key evidence:** At confidence 0.50, the expanded audit produced banana
-  2/15, corrected beer 0/15, and master_chef_can 8/15. Coke_can,
-  pudding_box, and tomato_soup_can each passed 4/5. In the existing beer
-  training set, 183/184 labelled boxes are majority near-black, unlike the
-  corrected rendered asset. The completed 724-image targeted supplement passed
-  all quota, asset, empty-negative, and leakage gates; all 225 corrected beer
-  crops passed the 50% black-fraction gate (19.86% median, 27.54% maximum).
-  Removing all 184 V1 frames containing old beer and composing the remaining
-  1,976 replay frames produced a validated 2,700-image dataset (2,219 train,
-  481 val) with zero old-beer replay frames.
-- **Next step:** After explicit approval, fine-tune all 18 classes from V1
-  `best.pt`, report overall, legacy, targeted, and negative validation results
-  separately, then repeat the unchanged P1/P2 robustness audit.
+- **Key evidence:** The competition-like audit remains banana 2/15, corrected
+  beer 0/15, and master_chef_can 8/15 for V1. One 40-epoch V2 fine-tune from V1
+  completed on the validated 2,700-image dataset. The selected epoch-31
+  checkpoint has targeted recalls .973/1.000/1.000 for banana/beer/master,
+  1.000/.979/.949 for coke/pudding/tomato, targeted mAP50-95 .908, and zero
+  detections on 10/10 negatives at confidence 0.50. Its stable-12 legacy macro
+  recall/mAP50/mAP50-95 are .987/.989/.954 versus V1 .979/.987/.931, with no
+  per-class decrease beyond 2 percentage points. Evidence and hashes are in
+  `docs/FORMAL_MODEL_V2_TRAINING_2026-09-15.md`.
+- **Next step:** Run
+  `formal_objects_v2_yolo11n_finetune/weights/epoch30.pt` (human epoch 31,
+  SHA256 `c16f5332...564c`) through the frozen P1/P2 external gate first. Use
+  epoch-40 `best.pt` only if the main result is ambiguous or fails; do not
+  retrain from `yolo11n.pt` automatically.
 
 ### P-002 — Competition-like full-chain reliability is not established
 
@@ -126,9 +128,8 @@ without changing the frozen competition runtime parameters.
 
 ## Next Step
 
-Work on P-001 only: after explicit approval, train one unified 18-class model
-from the completed Formal V2 dataset and re-run the unchanged robustness audit.
-Do not alter
+Work on P-001 only: run the selected epoch-31 V2 candidate through the
+unchanged confidence-0.50 P1/P2 robustness audit. Do not alter
 confidence 0.50, depth/TF, online or final deduplication, final confirmation,
 Nav2, corner handling, FR3/MoveIt, or the candidate viewpoints as part of this
 model correction.
