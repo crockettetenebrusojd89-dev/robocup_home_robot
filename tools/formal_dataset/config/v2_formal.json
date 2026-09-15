@@ -1,0 +1,467 @@
+{
+  "schema_version": 2,
+  "seed": 20260916,
+  "image": {
+    "width": 640,
+    "height": 480,
+    "horizontal_fov_rad": 1.2217304764
+  },
+  "world": {
+    "table_top_z_m": 0.75,
+    "target_z_m": 0.82,
+    "camera_height_m": [
+      0.92,
+      1.18
+    ],
+    "camera_bearing_deg": [
+      -12,
+      12
+    ],
+    "camera_yaw_jitter_deg": [
+      -2,
+      2
+    ],
+    "camera_pitch_jitter_deg": [
+      -2,
+      2
+    ],
+    "minimum_bbox_area_px": 64,
+    "minimum_object_spacing_m": 0.16
+  },
+  "asset_contract": {
+    "provenance_filename": "asset_provenance.json",
+    "beer": {
+      "model_sdf_sha256": "4282a7ae9a064337b1c6a788caa3135e958c93b279f84e6b02ea0e893e0dab4c",
+      "texture_sha256": "8109bbef7fedb1adff19a22b16a18647871369ab74cfbfcbf4f5e45973bc5e06",
+      "required_sdf_tokens": [
+        "<sdf version=\"1.6\">",
+        "<pbr>",
+        "<albedo_map>",
+        "beer.png"
+      ]
+    }
+  },
+  "distance_bands_m": {
+    "near": [
+      1.1,
+      1.55
+    ],
+    "mid": [
+      1.55,
+      2.05
+    ],
+    "far": [
+      2.05,
+      2.6
+    ]
+  },
+  "backgrounds": [
+    {
+      "id": "warm_wood",
+      "world_origin_xy_m": [
+        0,
+        0
+      ],
+      "weight": 1
+    },
+    {
+      "id": "light_wood",
+      "world_origin_xy_m": [
+        20,
+        0
+      ],
+      "weight": 1
+    },
+    {
+      "id": "neutral_gray",
+      "world_origin_xy_m": [
+        40,
+        0
+      ],
+      "weight": 1
+    },
+    {
+      "id": "dark_wood",
+      "world_origin_xy_m": [
+        60,
+        0
+      ],
+      "weight": 1
+    }
+  ],
+  "placement": {
+    "table_size_xy_m": [
+      1.2,
+      0.8
+    ],
+    "object_inset_m": 0.12,
+    "center_fraction": 0.45,
+    "edge_band_m": 0.08
+  },
+  "lighting_profiles": [
+    {
+      "id": "normal",
+      "weight": 1,
+      "main_rgb": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "main_intensity": [
+        0.9,
+        1.05
+      ],
+      "direction_xyz": [
+        -0.45,
+        0.2,
+        -0.87
+      ],
+      "ambient_fill_rgb": [
+        0.72,
+        0.76,
+        0.82
+      ],
+      "ambient_fill_intensity": [
+        0.16,
+        0.22
+      ]
+    },
+    {
+      "id": "bright",
+      "weight": 1,
+      "main_rgb": [
+        1,
+        0.98,
+        0.94
+      ],
+      "main_intensity": [
+        1.1,
+        1.25
+      ],
+      "direction_xyz": [
+        -0.35,
+        -0.15,
+        -0.92
+      ],
+      "ambient_fill_rgb": [
+        0.82,
+        0.84,
+        0.86
+      ],
+      "ambient_fill_intensity": [
+        0.22,
+        0.3
+      ]
+    },
+    {
+      "id": "dim",
+      "weight": 1,
+      "main_rgb": [
+        0.72,
+        0.76,
+        0.82
+      ],
+      "main_intensity": [
+        0.62,
+        0.76
+      ],
+      "direction_xyz": [
+        -0.6,
+        0.28,
+        -0.75
+      ],
+      "ambient_fill_rgb": [
+        0.62,
+        0.67,
+        0.75
+      ],
+      "ambient_fill_intensity": [
+        0.1,
+        0.15
+      ]
+    },
+    {
+      "id": "warm_side",
+      "weight": 1,
+      "main_rgb": [
+        1,
+        0.88,
+        0.74
+      ],
+      "main_intensity": [
+        0.82,
+        0.98
+      ],
+      "direction_xyz": [
+        -0.28,
+        -0.52,
+        -0.81
+      ],
+      "ambient_fill_rgb": [
+        0.78,
+        0.72,
+        0.66
+      ],
+      "ambient_fill_intensity": [
+        0.14,
+        0.2
+      ]
+    }
+  ],
+  "split_policy": {
+    "train": {
+      "yaw_offset_deg": 0,
+      "seed_offset": 0
+    },
+    "val": {
+      "yaw_offset_deg": 15,
+      "seed_offset": 1000003
+    }
+  },
+  "negative_samples": {
+    "train": 30,
+    "val": 10
+  },
+  "class_policies": {
+    "beer": {
+      "samples": {
+        "train": 180,
+        "val": 45
+      },
+      "distance_weights": {
+        "near": 1,
+        "mid": 1,
+        "far": 1
+      },
+      "yaw_weights": {
+        "0": 1,
+        "30": 1,
+        "60": 1,
+        "90": 1,
+        "120": 1,
+        "150": 1,
+        "180": 1,
+        "210": 1,
+        "240": 1,
+        "270": 1,
+        "300": 1,
+        "330": 1
+      },
+      "yaw_jitter_deg": 4,
+      "placement_weights": {
+        "center": 1,
+        "edge": 1,
+        "corner": 1
+      },
+      "background_weights": {
+        "warm_wood": 1,
+        "light_wood": 1,
+        "neutral_gray": 1,
+        "dark_wood": 1
+      },
+      "lighting_weights": {
+        "normal": 1,
+        "bright": 1,
+        "dim": 1,
+        "warm_side": 1
+      },
+      "secondary_object_probability": 0.125
+    },
+    "banana": {
+      "samples": {
+        "train": 144,
+        "val": 36
+      },
+      "distance_weights": {
+        "near": 1,
+        "mid": 2,
+        "far": 4
+      },
+      "yaw_weights": {
+        "0": 1,
+        "30": 1,
+        "60": 1,
+        "90": 1,
+        "120": 1,
+        "150": 1,
+        "180": 1,
+        "210": 1,
+        "240": 1,
+        "270": 4,
+        "300": 4,
+        "330": 4
+      },
+      "yaw_jitter_deg": 4,
+      "placement_weights": {
+        "center": 1,
+        "edge": 3,
+        "corner": 3
+      },
+      "background_weights": {
+        "warm_wood": 1,
+        "light_wood": 1,
+        "neutral_gray": 1,
+        "dark_wood": 1
+      },
+      "lighting_weights": {
+        "normal": 1,
+        "bright": 1,
+        "dim": 1,
+        "warm_side": 1
+      },
+      "secondary_object_probability": 0
+    },
+    "master_chef_can": {
+      "samples": {
+        "train": 108,
+        "val": 27
+      },
+      "distance_weights": {
+        "near": 1,
+        "mid": 3,
+        "far": 4
+      },
+      "yaw_weights": {
+        "0": 1,
+        "45": 2,
+        "90": 2,
+        "135": 2,
+        "180": 2,
+        "225": 2,
+        "270": 2,
+        "315": 1
+      },
+      "yaw_jitter_deg": 4,
+      "placement_weights": {
+        "center": 1,
+        "edge": 2,
+        "corner": 2
+      },
+      "background_weights": {
+        "warm_wood": 1,
+        "light_wood": 1,
+        "neutral_gray": 1,
+        "dark_wood": 1
+      },
+      "lighting_weights": {
+        "normal": 1,
+        "bright": 1,
+        "dim": 1,
+        "warm_side": 1
+      },
+      "secondary_object_probability": 0
+    },
+    "coke_can": {
+      "samples": {
+        "train": 36,
+        "val": 12
+      },
+      "distance_weights": {
+        "near": 0,
+        "mid": 1,
+        "far": 4
+      },
+      "yaw_weights": {
+        "0": 1,
+        "90": 1,
+        "180": 1,
+        "270": 1
+      },
+      "yaw_jitter_deg": 5,
+      "placement_weights": {
+        "center": 1,
+        "edge": 2,
+        "corner": 2
+      },
+      "background_weights": {
+        "warm_wood": 1,
+        "light_wood": 1,
+        "neutral_gray": 1,
+        "dark_wood": 1
+      },
+      "lighting_weights": {
+        "normal": 1,
+        "bright": 1,
+        "dim": 1,
+        "warm_side": 1
+      },
+      "secondary_object_probability": 0
+    },
+    "pudding_box": {
+      "samples": {
+        "train": 36,
+        "val": 12
+      },
+      "distance_weights": {
+        "near": 0,
+        "mid": 1,
+        "far": 4
+      },
+      "yaw_weights": {
+        "0": 1,
+        "90": 1,
+        "180": 1,
+        "270": 1
+      },
+      "yaw_jitter_deg": 5,
+      "placement_weights": {
+        "center": 1,
+        "edge": 2,
+        "corner": 2
+      },
+      "background_weights": {
+        "warm_wood": 1,
+        "light_wood": 1,
+        "neutral_gray": 1,
+        "dark_wood": 1
+      },
+      "lighting_weights": {
+        "normal": 1,
+        "bright": 1,
+        "dim": 1,
+        "warm_side": 1
+      },
+      "secondary_object_probability": 0
+    },
+    "tomato_soup_can": {
+      "samples": {
+        "train": 36,
+        "val": 12
+      },
+      "distance_weights": {
+        "near": 0,
+        "mid": 1,
+        "far": 4
+      },
+      "yaw_weights": {
+        "0": 1,
+        "90": 1,
+        "180": 1,
+        "270": 1
+      },
+      "yaw_jitter_deg": 5,
+      "placement_weights": {
+        "center": 1,
+        "edge": 2,
+        "corner": 2
+      },
+      "background_weights": {
+        "warm_wood": 1,
+        "light_wood": 1,
+        "neutral_gray": 1,
+        "dark_wood": 1
+      },
+      "lighting_weights": {
+        "normal": 1,
+        "bright": 1,
+        "dim": 1,
+        "warm_side": 1
+      },
+      "secondary_object_probability": 0
+    }
+  },
+  "beer_visual_check": {
+    "near_black_channel_threshold": 40,
+    "max_near_black_fraction": 0.75
+  }
+}

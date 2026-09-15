@@ -1,0 +1,153 @@
+{
+  "schema_version": 2,
+  "seed": 20260915,
+  "image": {
+    "width": 640,
+    "height": 480,
+    "horizontal_fov_rad": 1.2217304764
+  },
+  "world": {
+    "table_top_z_m": 0.75,
+    "target_z_m": 0.82,
+    "camera_height_m": [0.92, 1.18],
+    "camera_bearing_deg": [-12.0, 12.0],
+    "camera_yaw_jitter_deg": [-2.0, 2.0],
+    "camera_pitch_jitter_deg": [-2.0, 2.0],
+    "minimum_bbox_area_px": 64,
+    "minimum_object_spacing_m": 0.16
+  },
+  "asset_contract": {
+    "provenance_filename": "asset_provenance.json",
+    "beer": {
+      "model_sdf_sha256": "4282a7ae9a064337b1c6a788caa3135e958c93b279f84e6b02ea0e893e0dab4c",
+      "texture_sha256": "8109bbef7fedb1adff19a22b16a18647871369ab74cfbfcbf4f5e45973bc5e06",
+      "required_sdf_tokens": ["<sdf version=\"1.6\">", "<pbr>", "<albedo_map>", "beer.png"]
+    }
+  },
+  "distance_bands_m": {
+    "near": [1.10, 1.55],
+    "mid": [1.55, 2.05],
+    "far": [2.05, 2.60]
+  },
+  "backgrounds": [
+    {"id": "warm_wood", "world_origin_xy_m": [0.0, 0.0], "weight": 1.0},
+    {"id": "light_wood", "world_origin_xy_m": [20.0, 0.0], "weight": 1.0},
+    {"id": "neutral_gray", "world_origin_xy_m": [40.0, 0.0], "weight": 1.0},
+    {"id": "dark_wood", "world_origin_xy_m": [60.0, 0.0], "weight": 1.0}
+  ],
+  "placement": {
+    "table_size_xy_m": [1.20, 0.80],
+    "object_inset_m": 0.12,
+    "center_fraction": 0.45,
+    "edge_band_m": 0.08
+  },
+  "lighting_profiles": [
+    {
+      "id": "normal",
+      "weight": 1.0,
+      "main_rgb": [0.90, 0.90, 0.90],
+      "main_intensity": [0.90, 1.05],
+      "direction_xyz": [-0.45, 0.20, -0.87],
+      "ambient_fill_rgb": [0.72, 0.76, 0.82],
+      "ambient_fill_intensity": [0.16, 0.22]
+    },
+    {
+      "id": "bright",
+      "weight": 1.0,
+      "main_rgb": [1.00, 0.98, 0.94],
+      "main_intensity": [1.10, 1.25],
+      "direction_xyz": [-0.35, -0.15, -0.92],
+      "ambient_fill_rgb": [0.82, 0.84, 0.86],
+      "ambient_fill_intensity": [0.22, 0.30]
+    },
+    {
+      "id": "dim",
+      "weight": 1.0,
+      "main_rgb": [0.72, 0.76, 0.82],
+      "main_intensity": [0.62, 0.76],
+      "direction_xyz": [-0.60, 0.28, -0.75],
+      "ambient_fill_rgb": [0.62, 0.67, 0.75],
+      "ambient_fill_intensity": [0.10, 0.15]
+    },
+    {
+      "id": "warm_side",
+      "weight": 1.0,
+      "main_rgb": [1.00, 0.88, 0.74],
+      "main_intensity": [0.82, 0.98],
+      "direction_xyz": [-0.28, -0.52, -0.81],
+      "ambient_fill_rgb": [0.78, 0.72, 0.66],
+      "ambient_fill_intensity": [0.14, 0.20]
+    }
+  ],
+  "split_policy": {
+    "train": {"yaw_offset_deg": 0.0, "seed_offset": 0},
+    "val": {"yaw_offset_deg": 15.0, "seed_offset": 1000003}
+  },
+  "negative_samples": {"train": 4, "val": 2},
+  "class_policies": {
+    "beer": {
+      "samples": {"train": 8, "val": 4},
+      "distance_weights": {"near": 1.0, "mid": 1.0, "far": 1.0},
+      "yaw_weights": {"0": 1.0, "30": 1.0, "60": 1.0, "90": 1.0, "120": 1.0, "150": 1.0, "180": 1.0, "210": 1.0, "240": 1.0, "270": 1.0, "300": 1.0, "330": 1.0},
+      "yaw_jitter_deg": 4.0,
+      "placement_weights": {"center": 1.0, "edge": 1.0, "corner": 1.0},
+      "background_weights": {"warm_wood": 1.0, "light_wood": 1.0, "neutral_gray": 1.0, "dark_wood": 1.0},
+      "lighting_weights": {"normal": 1.0, "bright": 1.0, "dim": 1.0, "warm_side": 1.0},
+      "secondary_object_probability": 0.125
+    },
+    "banana": {
+      "samples": {"train": 6, "val": 3},
+      "distance_weights": {"near": 1.0, "mid": 2.0, "far": 4.0},
+      "yaw_weights": {"0": 1.0, "30": 1.0, "60": 1.0, "90": 1.0, "120": 1.0, "150": 1.0, "180": 1.0, "210": 1.0, "240": 1.0, "270": 4.0, "300": 4.0, "330": 4.0},
+      "yaw_jitter_deg": 4.0,
+      "placement_weights": {"center": 1.0, "edge": 3.0, "corner": 3.0},
+      "background_weights": {"warm_wood": 1.0, "light_wood": 1.0, "neutral_gray": 1.0, "dark_wood": 1.0},
+      "lighting_weights": {"normal": 1.0, "bright": 1.0, "dim": 1.0, "warm_side": 1.0},
+      "secondary_object_probability": 0.0
+    },
+    "master_chef_can": {
+      "samples": {"train": 6, "val": 3},
+      "distance_weights": {"near": 1.0, "mid": 3.0, "far": 4.0},
+      "yaw_weights": {"0": 1.0, "45": 2.0, "90": 2.0, "135": 2.0, "180": 2.0, "225": 2.0, "270": 2.0, "315": 1.0},
+      "yaw_jitter_deg": 4.0,
+      "placement_weights": {"center": 1.0, "edge": 2.0, "corner": 2.0},
+      "background_weights": {"warm_wood": 1.0, "light_wood": 1.0, "neutral_gray": 1.0, "dark_wood": 1.0},
+      "lighting_weights": {"normal": 1.0, "bright": 1.0, "dim": 1.0, "warm_side": 1.0},
+      "secondary_object_probability": 0.0
+    },
+    "coke_can": {
+      "samples": {"train": 2, "val": 1},
+      "distance_weights": {"near": 0.0, "mid": 1.0, "far": 4.0},
+      "yaw_weights": {"0": 1.0, "90": 1.0, "180": 1.0, "270": 1.0},
+      "yaw_jitter_deg": 5.0,
+      "placement_weights": {"center": 1.0, "edge": 2.0, "corner": 2.0},
+      "background_weights": {"warm_wood": 1.0, "light_wood": 1.0, "neutral_gray": 1.0, "dark_wood": 1.0},
+      "lighting_weights": {"normal": 1.0, "bright": 1.0, "dim": 1.0, "warm_side": 1.0},
+      "secondary_object_probability": 0.0
+    },
+    "pudding_box": {
+      "samples": {"train": 2, "val": 1},
+      "distance_weights": {"near": 0.0, "mid": 1.0, "far": 4.0},
+      "yaw_weights": {"0": 1.0, "90": 1.0, "180": 1.0, "270": 1.0},
+      "yaw_jitter_deg": 5.0,
+      "placement_weights": {"center": 1.0, "edge": 2.0, "corner": 2.0},
+      "background_weights": {"warm_wood": 1.0, "light_wood": 1.0, "neutral_gray": 1.0, "dark_wood": 1.0},
+      "lighting_weights": {"normal": 1.0, "bright": 1.0, "dim": 1.0, "warm_side": 1.0},
+      "secondary_object_probability": 0.0
+    },
+    "tomato_soup_can": {
+      "samples": {"train": 2, "val": 1},
+      "distance_weights": {"near": 0.0, "mid": 1.0, "far": 4.0},
+      "yaw_weights": {"0": 1.0, "90": 1.0, "180": 1.0, "270": 1.0},
+      "yaw_jitter_deg": 5.0,
+      "placement_weights": {"center": 1.0, "edge": 2.0, "corner": 2.0},
+      "background_weights": {"warm_wood": 1.0, "light_wood": 1.0, "neutral_gray": 1.0, "dark_wood": 1.0},
+      "lighting_weights": {"normal": 1.0, "bright": 1.0, "dim": 1.0, "warm_side": 1.0},
+      "secondary_object_probability": 0.0
+    }
+  },
+  "beer_visual_check": {
+    "near_black_channel_threshold": 40,
+    "max_near_black_fraction": 0.75
+  }
+}

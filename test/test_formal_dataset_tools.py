@@ -3,12 +3,16 @@
 
 from copy import deepcopy
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
 import generate_dataset
+import prepare_v2_assets
 import validate_dataset
+import v2_common
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +92,167 @@ class FormalDatasetToolsTest(unittest.TestCase):
             path.write_text(json.dumps(invalid), encoding='utf-8')
             with self.assertRaisesRegex(ValueError, r'must be in \[0, 1\]'):
                 generate_dataset.load_config(path, len(self.classes))
+
+    def test_v2_smoke_plan_is_targeted_and_split_before_capture(self):
+        config = v2_common.load_v2_config(
+            TOOL_ROOT / 'config' / 'v2_smoke.json', EXPECTED_NAMES
+        )
+        asset_manifest = {
+            'classes': {
+                name: {'tree_sha256': f'{index:064x}'}
+                for index, name in enumerate(EXPECTED_NAMES, start=1)
+            }
+        }
+        first = v2_common.build_scenario_plan(
+            config, self.classes, asset_manifest
+        )
+        second = v2_common.build_scenario_plan(
+            config, self.classes, asset_manifest
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 45)
+        train_groups = {
+            item['scene_group_id'] for item in first if item['split'] == 'train'
+        }
+        val_groups = {
+            item['scene_group_id'] for item in first if item['split'] == 'val'
+        }
+        self.assertFalse(train_groups & val_groups)
+        banana_train = [
+            item for item in first
+            if item['split'] == 'train'
+            and item['primary']
+            and item['primary']['class_name'] == 'banana'
+        ]
+        self.assertEqual(len(banana_train), 6)
+        self.assertEqual(
+            sum(item['camera']['distance_band'] == 'far' for item in banana_train),
+            3,
+        )
+        self.assertGreaterEqual(
+            sum(item['placement_category'] in {'edge', 'corner'} for item in banana_train),
+            5,
+        )
+        self.assertEqual(sum(item['negative'] for item in first), 6)
+
+    def test_v2_quota_rounding_is_exact_and_deterministic(self):
+        weights = {'near': 1.0, 'mid': 2.0, 'far': 4.0}
+        self.assertEqual(
+            v2_common.quota_counts(6, weights),
+            {'near': 1, 'mid': 2, 'far': 3},
+        )
+        self.assertEqual(sum(v2_common.quota_counts(288, weights).values()), 288)
+
+    def test_v2_formal_plan_has_only_the_approved_targeted_supplement(self):
+        config = v2_common.load_v2_config(
+            TOOL_ROOT / 'config' / 'v2_formal.json', EXPECTED_NAMES
+        )
+        asset_manifest = {
+            'classes': {
+                name: {'tree_sha256': f'{index:064x}'}
+                for index, name in enumerate(EXPECTED_NAMES, start=1)
+            }
+        }
+        plan = v2_common.build_scenario_plan(
+            config, self.classes, asset_manifest
+        )
+        self.assertEqual(len(plan), 724)
+        expected = {
+            'train': {
+                'beer': 180, 'banana': 144, 'master_chef_can': 108,
+                'coke_can': 36, 'pudding_box': 36,
+                'tomato_soup_can': 36,
+            },
+            'val': {
+                'beer': 45, 'banana': 36, 'master_chef_can': 27,
+                'coke_can': 12, 'pudding_box': 12,
+                'tomato_soup_can': 12,
+            },
+        }
+        for split, expected_counts in expected.items():
+            actual = {}
+            for name in expected_counts:
+                actual[name] = sum(
+                    item['split'] == split
+                    and item['primary'] is not None
+                    and item['primary']['class_name'] == name
+                    for item in plan
+                )
+            self.assertEqual(actual, expected_counts)
+            self.assertEqual(
+                sum(item['split'] == split and item['negative'] for item in plan),
+                config['negative_samples'][split],
+            )
+
+    def test_v2_lighting_values_must_match_the_declared_profile(self):
+        config = v2_common.load_v2_config(
+            TOOL_ROOT / 'config' / 'v2_smoke.json', EXPECTED_NAMES
+        )
+        profile = config['lighting_profiles'][0]
+        direction_length = math.sqrt(sum(
+            value * value for value in profile['direction_xyz']
+        ))
+        lighting = {
+            'seed': 1,
+            'profile_id': profile['id'],
+            'main_rgb': profile['main_rgb'],
+            'main_intensity': sum(profile['main_intensity']) / 2,
+            'direction_xyz': [
+                value / direction_length for value in profile['direction_xyz']
+            ],
+            'ambient_fill_rgb': profile['ambient_fill_rgb'],
+            'ambient_fill_intensity': sum(profile['ambient_fill_intensity']) / 2,
+        }
+        validate_dataset._validate_lighting(
+            'sample', lighting, {profile['id']: profile}
+        )
+        lighting['main_intensity'] = 99.0
+        with self.assertRaisesRegex(ValueError, 'intensity is outside'):
+            validate_dataset._validate_lighting(
+                'sample', lighting, {profile['id']: profile}
+            )
+
+    def test_empty_v2_label_is_parseable_for_declared_negatives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'negative.txt'
+            path.write_text('', encoding='utf-8')
+            self.assertEqual(validate_dataset._read_boxes(path, set(range(18))), [])
+
+    def test_prepare_v2_assets_preserves_source_and_installs_pbr_beer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'v1'
+            for name in EXPECTED_NAMES:
+                model = source / name
+                model.mkdir(parents=True)
+                (model / 'model.config').write_text(name, encoding='utf-8')
+                (model / 'model.sdf').write_text('<sdf/>', encoding='utf-8')
+            original_beer = (source / 'beer' / 'model.sdf').read_bytes()
+            archive_path = root / 'beer.zip'
+            with zipfile.ZipFile(archive_path, 'w') as archive:
+                archive.writestr(
+                    'beer/model.sdf',
+                    '<sdf version="1.6"><pbr><albedo_map>beer.png</albedo_map></pbr></sdf>',
+                )
+                archive.writestr('beer/model.config', 'beer-v2')
+                archive.writestr('beer/materials/textures/beer.png', b'png-bytes')
+            output = root / 'v2'
+            provenance = prepare_v2_assets.prepare(
+                source, archive_path, output, EXPECTED_NAMES
+            )
+            self.assertEqual((source / 'beer' / 'model.sdf').read_bytes(), original_beer)
+            self.assertIn('<pbr>', (output / 'beer' / 'model.sdf').read_text())
+            self.assertEqual(provenance['schema_version'], 2)
+            self.assertTrue((output / 'asset_provenance.json').is_file())
+
+    def test_prepare_v2_assets_rejects_archive_traversal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / 'beer.zip'
+            with zipfile.ZipFile(archive_path, 'w') as archive:
+                archive.writestr('../escape', 'bad')
+            with zipfile.ZipFile(archive_path) as archive:
+                with self.assertRaisesRegex(ValueError, 'unsafe'):
+                    prepare_v2_assets._safe_members(archive)
 
 
 if __name__ == '__main__':

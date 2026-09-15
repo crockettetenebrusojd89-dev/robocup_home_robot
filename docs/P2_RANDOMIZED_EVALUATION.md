@@ -299,3 +299,36 @@ Evidence directories are:
 - `~/robocup_assets/p2_eval/formal_18_class_representative_audit_20260915`;
 - `~/robocup_assets/p2_eval/formal_18_class_expanded_weak_audit_20260915`;
 - `~/robocup_assets/p2_eval/formal_18_class_expanded_master_chef_can_20260915`.
+
+## Formal Model V2 pipeline smoke, 2026-09-15
+
+The V2 offline generator now uses an isolated asset root, a precomputed
+per-class scenario plan, four table/background islands, and four bounded
+Gazebo lighting profiles. It records object/camera geometry, yaw bin, distance
+band, placement, asset hashes, light parameters, split, seed, scene group, and
+final boxes and image hashes for every frame. A rejected box stops the run;
+there is no V1-style retry that can bias the recorded quota toward easy poses.
+
+The smoke at
+`~/robocup_assets/datasets/formal_objects_v2_smoke_20260915` completed all 45
+captures: 30 train and 15 val, including 6 declared empty/background negatives.
+Primary counts were beer 8/4, banana 6/3, master_chef_can 6/3, and each
+borderline class 2/1 for train/val. Train/val scene groups, exact image hashes,
+exact background-light parameter combinations, and perceptual near-duplicates
+all had zero overlap.
+
+The corrected beer was present in 12 primary frames spanning all distance and
+lighting bands represented by the smoke. Its maximum near-black fraction was
+26.71% and median was 22.12%, versus the invalid V1 median of 95.4%. Manual
+inspection of both contact sheets and the numerically darkest beer frame
+confirmed a visible colored label and aligned box. Far/problem-yaw banana,
+mid/far multi-yaw master_chef_can, edge/corner placement, lighting variants,
+and empty tables were also visually present with aligned labels.
+
+The reviewed formal plan contains 724 new frames but was not run: 570 train
+and 154 val, comprising corrected beer 180/45, banana 144/36,
+master_chef_can 108/27, each borderline class 36/12, plus 30/10 negatives.
+Removing every V1 image containing old beer leaves 1,649 train and 327 val
+replay images. The eventual composition would therefore contain exactly 2,700
+images while retaining clean replay from all 17 non-beer classes. Dataset
+composition and unified training remain separate, explicitly unstarted steps.

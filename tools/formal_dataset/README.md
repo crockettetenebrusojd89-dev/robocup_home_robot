@@ -41,6 +41,78 @@ YOLO labels from Gazebo's visible-2D bounding-box camera.
 The contact sheet is a required human check that the rendered model and box
 identity agree; the numeric validator cannot detect a visually wrong model.
 
+## Formal Model V2 targeted pipeline
+
+V2 is an additive, offline-only pipeline. It leaves the V1 world, assets,
+dataset, and checkpoint untouched. Its capture plan is completely determined
+before Gazebo starts, so a failed or too-small bounding box stops the run
+instead of silently resampling an easier pose.
+
+First create the independent asset root. The command refuses an existing
+non-empty output, replaces only `beer`, and records archive, per-file, and
+per-model-tree SHA256 values in `asset_provenance.json`:
+
+```bash
+python3 scripts/prepare_v2_assets.py \
+  --source ~/robocup_assets/official_models \
+  --beer-zip ~/Downloads/beer.zip \
+  --output ~/robocup_assets/official_models_v2
+```
+
+The checked teacher asset contract is:
+
+- `beer.zip`: `d4a787f320432ab37a67b81e3b6c175c1863ae8315456c56b9094d26df7396fa`;
+- PBR `beer/model.sdf`: `4282a7ae9a064337b1c6a788caa3135e958c93b279f84e6b02ea0e893e0dab4c`;
+- `beer.png`: `8109bbef7fedb1adff19a22b16a18647871369ab74cfbfcbf4f5e45973bc5e06`.
+
+Generate and validate the small V2 smoke before any formal run:
+
+```bash
+python3 scripts/generate_dataset_v2.py \
+  --config config/v2_smoke.json \
+  --models ~/robocup_assets/official_models_v2 \
+  --output ~/robocup_assets/datasets/formal_objects_v2_smoke
+
+python3 scripts/validate_dataset.py \
+  ~/robocup_assets/datasets/formal_objects_v2_smoke
+
+python3 scripts/visualize_labels.py \
+  ~/robocup_assets/datasets/formal_objects_v2_smoke \
+  --split train \
+  --output ~/robocup_assets/datasets/formal_objects_v2_smoke/preview/train_contact_sheet.jpg
+```
+
+`v2_smoke.json` and `v2_formal.json` express independent per-class sample,
+distance-band, yaw-bin, placement, background, lighting, and secondary-object
+policies. The formal configuration is a reviewed 724-image targeted supplement
+(570 train, 154 val), not a command to run automatically. It is intended to be
+combined later with all V1 replay images that do not contain the legacy beer;
+the whole V1 image must be excluded when any old beer label is present.
+
+Each generated image has one `scenario_manifest.jsonl` record containing its
+split, immutable scene-group ID, random seed, primary and optional secondary
+class plus asset-tree hashes, object poses/yaws, camera pose and distance band,
+placement category, background, complete Gazebo light parameters and seed,
+YOLO boxes, and final image SHA256. Validation enforces exact configured
+quotas, asset identity, class and box consistency, declared empty negatives,
+and zero train/val overlap for scene groups, exact images, exact
+background-light combinations, and perceptual near-duplicates. It also rejects
+beer crops with the legacy near-black failure signature.
+
+After explicit approval, the targeted formal supplement can be generated with:
+
+```bash
+python3 scripts/generate_dataset_v2.py \
+  --config config/v2_formal.json \
+  --models ~/robocup_assets/official_models_v2 \
+  --output ~/robocup_assets/datasets/formal_objects_v2_targeted
+```
+
+Do not train directly on the targeted supplement: the cleaned 17-class V1
+replay must first be composed into the final unified 18-class training dataset.
+The unchanged P2 robustness scenes remain an external test gate and must never
+be copied into either split.
+
 ## Full first-pass dataset
 
 ```bash
