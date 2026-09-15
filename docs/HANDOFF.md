@@ -1,4 +1,4 @@
-# Handoff: FR3 V2 Static Stowed Integration
+# Project Handoff
 
 - Feature branch: `codex/fr3-v2-integration` (merged and retired).
 - Integration commit: `cf93726b0c19ab55e47cb1e4e3983fb5585ac05d`.
@@ -118,3 +118,48 @@ and relays offset FR3 joint states for the robot-state-publisher TF chain.
   low-evidence reinspection FP and scored 18/20. The final group 103 flow used
   the denser scan and evidence filter and scored 20/20 at an explicit 0.10 m
   threshold, with three TPs, no FPs, and no FNs.
+
+## Current P2 handoff — 2026-09-15
+
+- Active branch: `work/p2-randomized-eval`.
+- Latest documented implementation commit: `6eb7a60` (`test: audit formal
+  class robustness`).
+- This branch contains the fixed-seed repeatability harness, read-only vision
+  telemetry, visibility-versus-detector gate, geometry-based viewpoint
+  optimizer, alternate P2 viewpoint runner, tabletop robustness gate, and
+  unified 18-class audit.
+- The startup correction `1037610` is already in `main` and was merged into the
+  P2 branch. It raised Gazebo/Nav2 startup from 0/5 before the correction to
+  5/5 afterward; one of those five later failed during navigation.
+- Candidate observation points are P1 `(-3.485, -1.115, yaw=-0.532)` and P2
+  `(0.265, -0.665, yaw=-2.638)`. They are P2 candidates only and have not
+  replaced the frozen formal runner's scan stand.
+- The two-point seed-20260914 run scored 60/70 in 157.34 s: apple TP,
+  coke_can TP with maximum confidence 0.973, and banana FN with maximum
+  confidence 0.456.
+- Tabletop robustness at those two points was coke_can 15/15 and banana 2/15;
+  every tested position entered the view. Do not continue waypoint tuning from
+  this evidence.
+- The corrected beer asset renders properly in Fortress/OGRE2, but the old
+  training set rendered beer as a black cylinder. The current checkpoint scored
+  corrected beer 0/15.
+- Consolidated weak classes are banana 2/15, corrected beer 0/15, and
+  master_chef_can 8/15. Borderline classes are coke_can, pudding_box, and
+  tomato_soup_can. See `docs/P2_RANDOMIZED_EVALUATION.md` for the complete
+  table and artifact paths.
+
+### Frozen boundaries
+
+Do not change confidence 0.50, YOLO runtime thresholds, depth, TF, 5 cm online
+deduplication, 8 cm final deduplication, final confirmation filtering, Nav2,
+corners runtime, FR3/MoveIt, or the candidate observation points as part of the
+asset/model correction. Evaluation ground truth must remain outside detector
+and formal runtime inputs.
+
+### Next justified action
+
+Prepare targeted corrected training data for beer, banana, and
+master_chef_can, with limited far-view supplements for the three borderline
+classes. Then train and re-audit one unified 18-class checkpoint. Do not start
+the ten different randomized scenes until that model gate is complete, and do
+not merge this P2 branch into `main` without separate review and authorization.

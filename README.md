@@ -25,6 +25,11 @@ to remain usable without the workspace-level notes.
 Documentation maintenance rule: every change that modifies dependencies,
 launch commands, launch arguments, runtime order, expected topics, or success
 criteria must update the startup guide in the same branch or pull request.
+Every completed feature or evaluation branch must also update the relevant
+experiment/runbook document plus `docs/PROJECT_STATE.md` and `docs/HANDOFF.md`
+with its verified result, unresolved failures, evidence location, frozen
+parameters, and next decision. Git commits remain the exact change history;
+the Markdown files are the human-readable project and risk record.
 
 For verified capability boundaries and the latest handoff, see
 [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) and

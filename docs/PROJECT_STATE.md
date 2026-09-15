@@ -95,6 +95,51 @@ of judge input strings. Until that interface is published, the runner must keep
 normalization and aliases explicit and configurable, avoid assuming case or
 underscore conventions, and reject unknown or ambiguous inputs.
 
+## P2 randomized evaluation — latest verified evidence
+
+- The initial fixed-seed five-run repeatability gate reproduced a
+  `nav2_map_tf` startup failure in 5/5 attempts. Commit `1037610`, now in
+  `main` and this branch, kept the competition Gazebo server launch-owned.
+- After that correction, Gazebo/Nav2 startup passed 5/5 times. Four complete
+  tasks succeeded; one later failed in navigation. Scores were 50, 50, 50, 0,
+  and 48 out of 70.
+- Read-only post-reset telemetry now distinguishes target detection, valid
+  depth, TF success, cluster formation, and final-answer presence without
+  participating in any decision.
+- Three visibility-versus-detector trials showed the original single stand's
+  coke_can and banana FNs occurred before depth and TF: their offline maximum
+  confidences remained below the formal 0.50 threshold in every run.
+- Geometry optimization did not read the obsolete four-point YAML. The current
+  two-point candidate is P1 `(-3.485, -1.115, yaw=-0.532)` and P2
+  `(0.265, -0.665, yaw=-2.638)`, with a sampled worst legal-table distance of
+  2.448 m. Both points were Nav2-reachable in the fixed-seed trial, which
+  scored 60/70 in 157.34 s.
+- A 30-placement gate proved all tested coke_can and banana placements entered
+  a camera view. Coke_can passed 15/15, while banana passed only 2/15 at
+  confidence 0.50. The current blocker is therefore class robustness rather
+  than gross two-point geometric coverage.
+
+## Official visual assets and 18-class robustness — latest audit
+
+- The teacher's corrected beer preserves geometry, mass, inertia, collision,
+  pose, and the exact `beer.png`; it replaces the incompatible legacy material
+  reference with an SDF 1.6 PBR albedo map. It rendered correctly in a private
+  Fortress/OGRE2 smoke.
+- The existing formal training set's beer images are invalid for that corrected
+  appearance: 183/184 beer boxes contain a majority of near-black pixels, with
+  a 95.4% median dark-pixel fraction.
+- At the formal 0.50 threshold, the current consolidated class bands are:
+
+  - stable: apple, bleach_cleanser, bowl, chips_can, cracker_box, gelatin_box,
+    mustard_bottle, pitcher_base, potted_meat_can, sugar_box, tuna_fish_can,
+    windex_bottle;
+  - borderline: coke_can, pudding_box, tomato_soup_can;
+  - weak: banana (2/15), corrected beer (0/15), master_chef_can (8/15).
+
+- A targeted data correction followed by a new unified 18-class training run
+  is justified. No threshold change, observation-point change, class-specific
+  detector, or retraining has been performed.
+
 ## FR3 V2 static integration — verified in commit `cf93726`
 
 - The navigation-stowed joint reference is
@@ -120,7 +165,8 @@ establish arm control, MoveIt2 planning, or visual grasping.
   simultaneously visible and closer than 8 cm.
 - Calibration of the 8 cm final-dedup radius against official competition
   object spacing and randomized layouts beyond the provided scoring example.
-- Repeat trials with randomized object placement and temporary obstacles.
+- Ten different randomized layouts and temporary-obstacle trials have not been
+  started. Existing repeatability evidence covers one fixed seed only.
 - Manual C0-C3 capture and official-scorer A/B validation. The code/history
   audit found no prior corner configuration or runtime calibration. Current
   spawn and AMCL start anchors imply only near alignment (about 6.1 cm anchor
@@ -132,8 +178,11 @@ establish arm control, MoveIt2 planning, or visual grasping.
 
 ## Current priority
 
-1. Run randomized full-chain official scoring, including nearby same-class
-   objects, temporary obstacles, occlusion, and the eight-minute cap.
-2. Use those failures to improve model generalization, localization, search,
-   or deduplication one justified change at a time.
-3. Manipulation and grasping afterwards.
+1. Correct the beer training domain and add targeted banana and
+   master_chef_can evidence, plus small far-view supplements for coke_can,
+   pudding_box, and tomato_soup_can.
+2. Retrain and re-audit one unified 18-class checkpoint while keeping formal
+   confidence 0.50 and all frozen runtime parameters unchanged.
+3. After the model gate passes, resume different-seed randomized full-chain
+   scoring, including temporary obstacles, occlusion, and the eight-minute cap.
+4. Manipulation and grasping afterwards.

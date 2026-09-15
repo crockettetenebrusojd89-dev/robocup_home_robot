@@ -124,3 +124,178 @@ filter or shutdown messages. They did not prevent the canonical run from
 finishing, so they are non-blocking noise for this smoke and are deliberately
 not repaired in P2. They can still obscure useful evidence and should not be
 generalized as harmless without more trials.
+
+## Fixed-seed repeatability gate and startup correction, 2026-09-14/15
+
+Commit `1b951f7` added the repeatability harness. The first five-run gate kept
+seed `20260914`, the generated world, object
+poses/yaws, targets, checkpoint, formal parameters, fixed scan pose, and
+explicit scorer threshold `0.10 m` unchanged. All five attempts failed at
+`nav2_map_tf`; startup and complete-runtime success were both 0/5. Wall time
+was tightly grouped from 126.77 s to 128.45 s. This established a deterministic
+startup defect rather than a visual repeatability result.
+
+Commit `1037610` corrected ownership of the competition Gazebo server so that
+the formal world loader remains the only launcher. That correction entered
+`main` before it was merged back into this P2 branch. It did not change Nav2,
+vision, scan, depth, TF, clustering, or deduplication parameters.
+
+The fixed-seed gate was then repeated with read-only telemetry:
+
+- Gazebo and Nav2 startup succeeded in 5/5 runs;
+- four runs completed and one failed during navigation, for 4/5 complete-task
+  success;
+- scores were 50, 50, 50, 0, and 48 out of 70;
+- wall times were 92.68, 148.16, 112.23, 84.14, and 86.33 s;
+- apple reached detection, valid depth, successful TF, a cluster, and the final
+  answer in every visually evaluable run; its four TP errors were 3.05, 2.59,
+  0.52, and 5.59 cm, with one additional FP in run 5;
+- coke_can was not detected in any of the four visually evaluable runs;
+- banana was detected, depth-valid, transformed, and clustered in only one of
+  four visually evaluable runs, but never passed the final-answer gate.
+
+Evidence is under
+`~/robocup_assets/p2_eval/repeatability_telemetry_seed_20260914_20260915`.
+The older all-startup-failure evidence remains under
+`~/robocup_assets/p2_eval/repeatability_smoke_multitable_seed_20260914`.
+
+## Read-only pipeline telemetry
+
+Commit `0dded44` added post-reset counters that expose raw target detection,
+valid depth, TF success, cluster formation, and final-answer presence. The
+counters are read by the P2 harness only after a trial. They do not feed any
+detector, localizer, confirmation, clustering, filtering, or answer decision.
+This closed the original diagnostic gap while preserving formal behavior.
+
+## Visibility-versus-detector gate
+
+Commit `3e593e1` added an evaluation-only RGB capture and offline inference
+path. Gazebo labels and object poses are used only after inference to associate
+evidence; the detector receives RGB images only. Three identical fixed-point
+trials all completed navigation and scoring. For every run:
+
+- apple was detected and scored TP;
+- coke_can's offline maximum confidence was 0.060, 0.254, and 0.214;
+- banana's offline maximum confidence was 0.065, 0.172, and 0.309;
+- neither remote class produced any frame at the formal 0.50 threshold.
+
+This separated the remote FNs from depth, TF, clustering, and final filtering:
+they were raw detector misses at the original single scan stand. Evidence is
+under `~/robocup_assets/p2_eval/visibility_gate_seed_20260914_20260915`.
+
+## Geometry-based observation-point evaluation
+
+Commit `21d7789` sampled all legal object-center areas on the four living-room
+tables against the saved occupancy map, robot footprint, structural clearance,
+table clearance, 70-degree camera FOV, and 5 m depth limit. It did not read the
+obsolete four-point YAML and did not connect corners to runtime.
+
+The safety-adjusted one-point trial used
+`(-1.685, -1.215, yaw=-2.051)` with a 3.047 m worst legal-table distance. It
+completed in 100.20 s and scored 60/70: apple and coke_can TP, banana FN.
+
+The current two-point candidate is:
+
+- P1 `(-3.485, -1.115, yaw=-0.532)`;
+- P2 `(0.265, -0.665, yaw=-2.638)`.
+
+Its sampled worst legal-table distance is 2.448 m. Both points were reached by
+Nav2 in the fixed-seed trial. That run completed in 157.34 s and scored 60/70:
+apple TP, coke_can TP at maximum confidence 0.973, and banana FN at maximum
+confidence 0.456. The two points remain candidates, not frozen formal-runtime
+defaults.
+
+## Two-point tabletop-position robustness gate
+
+Commit `315154c` evaluated the fixed P1/P2 pair without changing the formal
+runner. For each placement it captured both observation points through a full
+rotation, ran the formal checkpoint at confidence 0.50, and used Gazebo labels
+only afterward for offline association.
+
+- all 30 tested placements entered the camera view;
+- coke_can was detected at 15/15 legal positions; per-position maximum
+  confidence ranged from 0.804 to 0.986, with median 0.944;
+- banana was detected at only 2/15 legal positions; per-position maximum
+  confidence ranged from 0.008 to 0.505, with median 0.092;
+- banana's worst associated box was about 31 x 8 px.
+
+The geometry therefore covers the tested tables, while banana is an object
+scale/appearance robustness problem. Observation points must not be adjusted
+again solely from this evidence. Evidence is under
+`~/robocup_assets/p2_eval/tabletop_robustness_gate_two_points_20260915`.
+
+## Corrected beer asset audit
+
+The teacher's corrected `beer.zip` was inspected without modifying the
+archive. Neither old nor new beer uses a mesh: both visual and collision shapes
+are cylinders of radius 0.055 m and length 0.230 m. Mass, inertia, link pose,
+collision, texture bytes, and the legacy SDF 1.4 file are unchanged.
+
+The active SDF changed from the legacy `Beer/Diffuse` script to an SDF 1.6 PBR
+material that directly uses `beer.png`, ambient/diffuse `1 1 1 1`, metalness
+0.0, and roughness 0.7. The material script also corrects `anistropic` to
+`anisotropic`. A private Gazebo Fortress/OGRE2 smoke rendered the complete can
+texture rather than a black cylinder, confirming this is a rendering
+compatibility repair with no geometry or physics change.
+
+The original unified training dataset is affected: it contains 184 beer
+instances, 183 of which have a majority of near-black pixels inside the label
+box. The median dark-pixel fraction is 95.4%, and median RGB is approximately
+(8, 7, 7). Do not treat the existing beer metrics as evidence for the corrected
+official appearance.
+
+## Unified 18-class robustness audit, 2026-09-15
+
+Commit `6eb7a60` added a P2-only audit using the formal `best.pt`, confidence
+0.50, the candidate P1/P2 positions, and 12 x 30-degree scans. Every class was
+first screened at five representative legal placements spanning near, middle,
+far, edge, corner, and multiple object yaws. Clearly weak classes were expanded
+to 15 positions. Corrected beer was loaded through an evaluation-only model
+resource path. Ground truth was never passed to YOLO or formal runtime.
+
+Confidence columns below are distributions of the per-position maximum. For
+banana, beer, and master_chef_can the stronger 15-position result replaces the
+five-position screen.
+
+| Class | Success | Visible frames | Median bbox (px) | Median / max confidence | Band |
+|---|---:|---:|---:|---:|---|
+| apple | 5/5 | 21 | 22 x 21 | 0.954 / 0.969 | stable |
+| banana | 2/15 | 138 | 36 x 12 | 0.092 / 0.505 | weak |
+| beer (corrected) | 0/15 | 77 | no detection | 0.000 / 0.000 | weak |
+| bleach_cleanser | 5/5 | 21 | 33 x 76 | 0.981 / 0.992 | stable |
+| bowl | 5/5 | 22 | 54 x 19 | 0.982 / 0.985 | stable |
+| chips_can | 5/5 | 21 | 25 x 74 | 0.984 / 0.991 | stable |
+| coke_can | 4/5 | 21 | 23 x 38 | 0.929 / 0.983 | borderline |
+| cracker_box | 5/5 | 22 | 59 x 68 | 0.992 / 0.996 | stable |
+| gelatin_box | 5/5 | 21 | 28 x 22 | 0.981 / 0.993 | stable |
+| master_chef_can | 8/15 | 76 | 36 x 43 | 0.516 / 0.927 | weak |
+| mustard_bottle | 5/5 | 21 | 29 x 57 | 0.985 / 0.994 | stable |
+| pitcher_base | 5/5 | 22 | 48 x 74 | 0.982 / 0.994 | stable |
+| potted_meat_can | 5/5 | 20 | 31 x 26 | 0.964 / 0.969 | stable |
+| pudding_box | 4/5 | 21 | 24 x 29 | 0.946 / 0.982 | borderline |
+| sugar_box | 5/5 | 21 | 29 x 54 | 0.958 / 0.993 | stable |
+| tomato_soup_can | 4/5 | 23 | 25 x 32 | 0.947 / 0.977 | borderline |
+| tuna_fish_can | 5/5 | 21 | 27 x 11 | 0.936 / 0.977 | stable |
+| windex_bottle | 5/5 | 21 | 34 x 85 | 0.990 / 0.992 | stable |
+
+The consolidated bands are:
+
+- stable: apple, bleach_cleanser, bowl, chips_can, cracker_box, gelatin_box,
+  mustard_bottle, pitcher_base, potted_meat_can, sugar_box, tuna_fish_can, and
+  windex_bottle;
+- borderline: coke_can, pudding_box, and tomato_soup_can;
+- weak: banana, corrected beer, and master_chef_can.
+
+Banana is primarily small-scale and problem-yaw sensitive. Beer is a confirmed
+material/training-domain mismatch. Master_chef_can has a distance/yaw/background
+domain gap that cannot be explained by tiny bbox size alone. The next dataset
+work should target corrected beer first, then far/small/problem-yaw banana,
+then mid/far multi-yaw master_chef_can, with smaller supplements for the three
+borderline classes. A unified 18-class retrain is justified after those data
+changes; no retraining was started by this audit.
+
+Evidence directories are:
+
+- `~/robocup_assets/p2_eval/formal_18_class_representative_audit_20260915`;
+- `~/robocup_assets/p2_eval/formal_18_class_expanded_weak_audit_20260915`;
+- `~/robocup_assets/p2_eval/formal_18_class_expanded_master_chef_can_20260915`.
