@@ -104,3 +104,61 @@ confidence 0.50.
 - Validation: V2 validator passed on the real smoke; 53 focused repository
   tests passed (11 dataset, 9 dedup, 14 P2, 6 world-loader, 13 runtime);
   C++ worker compiled with warnings enabled; `git diff --check` passed.
+
+## 2026-09-15 — Formal Model V2 dataset completion
+
+### Goal
+
+Generate and validate the reviewed 724-image targeted supplement, remove every
+V1 frame containing invalid old beer, compose the final unified dataset, and
+stop before training.
+
+### Done
+
+- Completed 570 train and 154 val targeted captures with the corrected PBR beer,
+  frozen per-class quotas, 40 negatives, manifests, previews, and asset hashes.
+- Added a primary sight-corridor guard after a deterministic secondary-object
+  occlusion stopped the first run at train sample 260; retained that partial run
+  as failure evidence and added regression coverage for the exact geometry.
+- Added an atomic dataset composer that removes whole old-beer image/label pairs,
+  hard-links retained source bytes under collision-proof names, and records
+  provenance and separate legacy, targeted-positive, and negative val lists.
+- Extended the validator for the fixed composition contract, source hashes,
+  old-beer exclusion, validation partitions, filename collisions, targeted
+  quotas, and annotation-aware perceptual leakage.
+
+### Results
+
+- Targeted validation passed all 724 frames: zero scene-group, exact-image,
+  exact background/light, or annotation-aware perceptual leakage. Corrected
+  beer black-fraction was 19.86% median and 27.54% maximum across 225 boxes,
+  with zero violations of the 50% gate.
+- Removed 151 train and 33 val V1 frames containing old beer as whole pairs.
+  The 1,649/327 clean replay plus 570/154 targeted frames produced exactly
+  2,219 train and 481 val images; all 2,700 output images remain hard-linked to
+  their recorded sources and old beer occurs in zero replay frames.
+- Manual previews passed for beer distance/light/yaw, hard banana,
+  master_chef_can, far borderline classes, and empty/background negatives.
+  Ultralytics accepted the final 18-class `data.yaml` without training.
+
+### Problem Updates
+
+- P-001 remains **OPEN**. Its data-layer blocker is resolved, but unified model
+  training and the frozen external P1/P2 robustness gate are still required.
+- P-002 through P-008 are unchanged. No runtime, navigation, viewpoint,
+  confidence, localization, or deduplication setting changed.
+
+### Next
+
+Wait for explicit approval. Then fine-tune one unified 18-class model from V1
+`best.pt`, report overall and source-partitioned validation, and repeat the
+unchanged confidence-0.50 P1/P2 audit. Do not start training automatically.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`
+- Implementation commit: `41d15a6`
+- Validation: both real dataset validators passed; 55 focused repository tests
+  passed (13 dataset, 9 dedup, 14 P2, 6 world-loader, 13 runtime); four edited
+  Python files passed `ament_flake8` and syntax compilation; `git diff --check`
+  passed.
