@@ -34,7 +34,7 @@ constexpr double kCameraForwardOffset = 0.20;
 constexpr double kCameraHeight = 0.90;
 constexpr double kCameraPitch = 0.1745329252;
 constexpr double kHiddenZ = -5.0;
-constexpr int kYawSamples = 24;
+constexpr int kDefaultYawSamples = 24;
 constexpr int kFreshFrames = 2;
 
 struct Viewpoint
@@ -73,6 +73,7 @@ struct Plan
 {
   std::string worldName;
   std::string cameraName;
+  int yawSamples{kDefaultYawSamples};
   std::vector<Viewpoint> viewpoints;
   std::vector<std::string> hiddenEntities;
   std::vector<Placement> placements;
@@ -117,6 +118,8 @@ Plan ReadPlan(const fs::path & _path)
     values >> kind;
     if (kind == "WORLD") {
       values >> plan.worldName >> plan.cameraName;
+    } else if (kind == "YAW_SAMPLES") {
+      values >> plan.yawSamples;
     } else if (kind == "VIEW") {
       Viewpoint viewpoint{};
       values >> viewpoint.index >> viewpoint.x >> viewpoint.y >> viewpoint.yaw;
@@ -140,7 +143,8 @@ Plan ReadPlan(const fs::path & _path)
     }
   }
   if (plan.worldName.empty() || plan.cameraName.empty() ||
-    plan.viewpoints.size() != 2 || plan.placements.empty())
+    plan.viewpoints.size() != 2 || plan.placements.empty() ||
+    plan.yawSamples <= 0)
   {
     throw std::runtime_error("capture plan is incomplete");
   }
@@ -289,8 +293,9 @@ private:
     WaitForFreshFrames(start.first, start.second, 4);
 
     for (const auto & viewpoint : plan_.viewpoints) {
-      for (int yawIndex = 0; yawIndex < kYawSamples; ++yawIndex) {
-        const double yaw = viewpoint.yaw + yawIndex * M_PI / 12.0;
+      for (int yawIndex = 0; yawIndex < plan_.yawSamples; ++yawIndex) {
+        const double yaw = viewpoint.yaw +
+          yawIndex * 2.0 * M_PI / plan_.yawSamples;
         const double cameraX = viewpoint.x + kCameraForwardOffset * std::cos(yaw);
         const double cameraY = viewpoint.y + kCameraForwardOffset * std::sin(yaw);
         start = Sequences();
