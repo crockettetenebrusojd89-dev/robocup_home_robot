@@ -36,6 +36,7 @@ SCAN_START_MARKER = "Living room scan starting."
 SCAN_END_MARKER = "Living room scan completed."
 TELEMETRY_MARKER = "VISION_TELEMETRY "
 STEP_PATTERN = re.compile(r"Scan step (\d+)/(\d+)")
+VIEWPOINT_PATTERN = re.compile(r"Observation point (\d+)/(\d+):")
 
 
 def stamp_nanoseconds(stamp) -> int:
@@ -89,6 +90,8 @@ class VisibilityCapture(Node):
         self.active = False
         self.step = 0
         self.phase = "waiting"
+        self.viewpoint_index = 0
+        self.viewpoint_total = 0
         self.last_periodic_stamp_ns = None
         self.raw_cache: OrderedDict[int, Image] = OrderedDict()
         self.cache_limit = 90
@@ -177,14 +180,23 @@ class VisibilityCapture(Node):
             "capture_clock_ns": self.get_clock().now().nanoseconds,
             "step": self.step,
             "phase": self.phase,
+            "viewpoint_index": self.viewpoint_index,
+            "viewpoint_total": self.viewpoint_total,
         }
         record.update(values)
         self.events.write(json.dumps(record, separators=(",", ":")) + "\n")
 
     def _rosout_callback(self, message: Log) -> None:
         active, step, phase = scan_event_state(message.msg, self.step, self.phase)
+        viewpoint_match = VIEWPOINT_PATTERN.search(message.msg)
+        if viewpoint_match:
+            self.viewpoint_index = int(viewpoint_match.group(1))
+            self.viewpoint_total = int(viewpoint_match.group(2))
+            self.step = 0
+            phase = "navigation"
         relevant = (
             active is not None
+            or viewpoint_match is not None
             or RESET_MARKER in message.msg
             or SCAN_START_MARKER in message.msg
             or SCAN_END_MARKER in message.msg
@@ -247,6 +259,8 @@ class VisibilityCapture(Node):
             "step": self.step,
             "phase": self.phase,
             "active": self.active,
+            "viewpoint_index": self.viewpoint_index,
+            "viewpoint_total": self.viewpoint_total,
             "frame_id": message.header.frame_id,
             "receipt_wall_time": time.time(),
             "receipt_monotonic_seconds": time.monotonic(),
@@ -369,6 +383,8 @@ class VisibilityCapture(Node):
                 "elapsed_wall_seconds": elapsed,
                 "final_step": self.step,
                 "final_phase": self.phase,
+                "final_viewpoint_index": self.viewpoint_index,
+                "final_viewpoint_total": self.viewpoint_total,
                 "counts": self.counts,
             },
         )

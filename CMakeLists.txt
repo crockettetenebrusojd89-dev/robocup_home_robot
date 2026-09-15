@@ -87,9 +87,17 @@ install(
 )
 
 install(
+  PROGRAMS scripts/p2_viewpoint_task_runner.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME p2_viewpoint_task_runner
+)
+
+install(
   FILES
+    scripts/formal_base_task_runner.py
     scripts/formal_runtime_config.py
     scripts/go_to_living_room.py
+    scripts/p2_viewpoint_plan.py
     scripts/scan_living_room.py
     scripts/vision_final_dedup.py
   DESTINATION lib/${PROJECT_NAME}

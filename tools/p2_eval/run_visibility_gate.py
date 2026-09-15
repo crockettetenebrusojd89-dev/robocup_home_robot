@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run 2-3 immutable trials with read-only visibility capture and analysis."""
+"""Run immutable trials with read-only visibility capture and analysis."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import shlex
@@ -113,6 +114,7 @@ def run_one(
     expected_hashes: Mapping[str, str],
     capture_hz: float,
     confidence_floor: float,
+    observation_plan_json: str | None,
 ) -> dict[str, Any]:
     run_id = f"run_{run_index:02d}"
     run_dir = output_dir / run_id
@@ -133,6 +135,14 @@ def run_one(
         device,
         max_runtime_seconds,
         setup_files,
+        (
+            {
+                "runner_executable": "p2_viewpoint_task_runner",
+                "observation_plan_json": observation_plan_json,
+            }
+            if observation_plan_json is not None
+            else None
+        ),
     )
     capture_command = _capture_command(
         capture_script,
@@ -157,6 +167,7 @@ def run_one(
         "capture_command": shlex.join(capture_command),
         "ground_truth_opened_for_scoring_and_analysis_after_runtime_exit": True,
         "immutable_input_hashes": before_hashes,
+        "observation_plan_json": observation_plan_json,
     }
     _write_json(run_dir / "isolation_audit.json", audit)
 
@@ -331,7 +342,14 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-trial-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument("--runs", type=int, choices=(2, 3), default=3)
+    parser.add_argument("--runs", type=int, choices=(1, 2, 3), default=3)
+    parser.add_argument(
+        "--observation-plan-json",
+        help=(
+            "Truth-independent one-to-three-point P2 plan; enables the "
+            "alternate evaluation runner without changing formal defaults."
+        ),
+    )
     parser.add_argument(
         "--model",
         type=Path,
@@ -352,6 +370,30 @@ def main(argv=None) -> int:
     parser.add_argument("--confidence-floor", type=float, default=0.001)
     args = parser.parse_args(argv)
     try:
+        observation_plan_json = None
+        if args.observation_plan_json is not None:
+            raw_plan = json.loads(args.observation_plan_json)
+            if not isinstance(raw_plan, list) or not 1 <= len(raw_plan) <= 3:
+                raise EvaluationConfigError(
+                    "observation plan must contain one to three points"
+                )
+            for point in raw_plan:
+                if not isinstance(point, dict) or set(point) != {"x", "y", "yaw"}:
+                    raise EvaluationConfigError(
+                        "each observation point must contain exactly x, y, yaw"
+                    )
+                if any(
+                    not isinstance(point[name], (int, float))
+                    or isinstance(point[name], bool)
+                    or not math.isfinite(float(point[name]))
+                    for name in ("x", "y", "yaw")
+                ):
+                    raise EvaluationConfigError(
+                        "observation point coordinates must be finite numbers"
+                    )
+            observation_plan_json = json.dumps(
+                raw_plan, separators=(",", ":")
+            )
         if args.output_dir.exists():
             raise EvaluationConfigError(
                 f"output directory already exists: {args.output_dir}"
@@ -386,6 +428,7 @@ def main(argv=None) -> int:
                 "match_threshold_m": 0.10,
                 "input_hashes": expected_hashes,
                 "frozen_runtime_parameters_changed": False,
+                "observation_plan_json": observation_plan_json,
             },
         )
         summaries = []
@@ -405,6 +448,7 @@ def main(argv=None) -> int:
                 expected_hashes,
                 args.capture_hz,
                 args.confidence_floor,
+                observation_plan_json,
             )
             summaries.append(summary)
             print(

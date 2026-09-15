@@ -120,16 +120,20 @@ def _build_runtime(context, robot_share):
             'device': _resolved(context, 'device'),
         }],
     )
+    runner_parameters = {
+        'target_classes': list(target_classes),
+        'group_number': group_number,
+        'answer_output_dir': str(output_directory),
+    }
+    observation_plan = _resolved(context, 'observation_plan_json')
+    if observation_plan:
+        runner_parameters['observation_plan_json'] = observation_plan
     runner = Node(
         package='robocup_home_robot',
-        executable='formal_base_task_runner',
+        executable=_resolved(context, 'runner_executable'),
         name='formal_base_task_runner',
         output='screen',
-        parameters=[{
-            'target_classes': list(target_classes),
-            'group_number': group_number,
-            'answer_output_dir': str(output_directory),
-        }],
+        parameters=[runner_parameters],
     )
 
     def start_formal_nodes(event, _context):
@@ -235,6 +239,16 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument('device', default_value='cpu'),
+        DeclareLaunchArgument(
+            'runner_executable',
+            default_value='formal_base_task_runner',
+            description='Internal P2 evaluation override; formal default is unchanged.',
+        ),
+        DeclareLaunchArgument(
+            'observation_plan_json',
+            default_value='',
+            description='Optional explicit P2 observation plan for an alternate runner.',
+        ),
         DeclareLaunchArgument('max_runtime_seconds', default_value='450.0'),
         OpaqueFunction(
             function=lambda context: _build_runtime(context, robot_share)

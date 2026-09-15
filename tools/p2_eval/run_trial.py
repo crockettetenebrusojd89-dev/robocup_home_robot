@@ -42,6 +42,7 @@ def build_runtime_command(
     device: str,
     max_runtime_seconds: float,
     setup_files: Sequence[Path],
+    evaluation_overrides: Mapping[str, str] | None = None,
 ) -> list[str]:
     """
     Build the only process boundary into the formal competition runtime.
@@ -62,6 +63,22 @@ def build_runtime_command(
         raise EvaluationConfigError("device must not be empty")
     if not math.isfinite(max_runtime_seconds) or max_runtime_seconds <= 0.0:
         raise EvaluationConfigError("max_runtime_seconds must be positive and finite")
+    evaluation_overrides = dict(evaluation_overrides or {})
+    if set(evaluation_overrides) - {
+        "runner_executable",
+        "observation_plan_json",
+    }:
+        raise EvaluationConfigError("unsupported P2 runtime evaluation override")
+    if evaluation_overrides and evaluation_overrides.get(
+        "runner_executable"
+    ) != "p2_viewpoint_task_runner":
+        raise EvaluationConfigError("P2 runner override must use the evaluation runner")
+    if bool(evaluation_overrides.get("observation_plan_json")) != bool(
+        evaluation_overrides
+    ):
+        raise EvaluationConfigError(
+            "P2 evaluation runner and observation plan must be supplied together"
+        )
 
     launch_values = [
         "ros2",
@@ -79,6 +96,9 @@ def build_runtime_command(
         f"device:={device}",
         f"max_runtime_seconds:={max_runtime_seconds}",
     ]
+    launch_values.extend(
+        f"{name}:={value}" for name, value in evaluation_overrides.items()
+    )
     shell_parts = [f"source {shlex.quote(str(path))}" for path in setup_files]
     shell_parts.append("exec " + " ".join(shlex.quote(value) for value in launch_values))
     return ["bash", "-lc", " && ".join(shell_parts)]
@@ -148,6 +168,8 @@ def _stage_from_log(log: str, timed_out: bool) -> tuple[str, str | None]:
         return "success", None
     if "Living room navigation failed." in log:
         return "navigation", "navigation did not report success"
+    if re.search(r"(?:Observation point \d+/\d+ scan|Scan step \d+/\d+) failed", log):
+        return "scan", "living-room scan did not complete"
     if (
         "Timed out waiting for transform from base_link to map" in log
         or 'Invalid frame ID "map"' in log

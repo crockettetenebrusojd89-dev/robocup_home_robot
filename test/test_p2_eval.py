@@ -124,6 +124,46 @@ class P2EvaluationTest(unittest.TestCase):
                 (),
             )
 
+    def test_runtime_command_allows_only_explicit_p2_viewpoint_override(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "model.pt"
+            model.touch()
+            runtime_inputs = {
+                "world_file": "/tmp/scenario.world",
+                "world_name": "robocup_home",
+                "target_1": "apple",
+                "target_2": "coke_can",
+                "target_3": "banana",
+                "group_number": 201,
+            }
+            command = build_runtime_command(
+                runtime_inputs,
+                root / "submission",
+                model,
+                "cpu",
+                450.0,
+                (),
+                {
+                    "runner_executable": "p2_viewpoint_task_runner",
+                    "observation_plan_json": '[{"x":0,"y":0,"yaw":0}]',
+                },
+            )
+            self.assertIn(
+                "runner_executable:=p2_viewpoint_task_runner", command[-1]
+            )
+            self.assertIn("observation_plan_json:=", command[-1])
+            with self.assertRaisesRegex(EvaluationConfigError, "unsupported"):
+                build_runtime_command(
+                    runtime_inputs,
+                    root / "submission",
+                    model,
+                    "cpu",
+                    450.0,
+                    (),
+                    {"ground_truth": "forbidden"},
+                )
+
     def test_scorer_command_explicitly_uses_ten_centimeters(self):
         self.assertEqual(MATCH_THRESHOLD_M, 0.10)
         with tempfile.TemporaryDirectory() as temporary:
@@ -172,6 +212,17 @@ class P2EvaluationTest(unittest.TestCase):
         self.assertEqual(
             _stage_from_log(log, False),
             ("navigation", "navigation did not report success"),
+        )
+
+    def test_explicit_scan_failure_wins_over_transient_map_warning(self):
+        log = "\n".join((
+            "Timed out waiting for transform from base_link to map",
+            "Living room navigation succeeded.",
+            "Scan step 1/12 failed. Spin status: ABORTED (6).",
+        ))
+        self.assertEqual(
+            _stage_from_log(log, False),
+            ("scan", "living-room scan did not complete"),
         )
 
     def test_prefixed_ros_log_evidence_is_recognized(self):

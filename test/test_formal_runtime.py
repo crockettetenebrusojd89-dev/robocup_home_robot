@@ -12,6 +12,7 @@ from formal_runtime_config import parse_group_number
 from formal_runtime_config import resolve_target_classes
 from formal_runtime_config import validate_answer_document
 from formal_runtime_config import validate_model_contract
+from p2_viewpoint_plan import parse_observation_plan
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -155,6 +156,21 @@ class FormalRuntimeTest(unittest.TestCase):
                     'beer': [],
                 }
             }, targets)
+
+    def test_p2_observation_plan_is_small_explicit_and_finite(self):
+        plan = parse_observation_plan(
+            '[{"x":-2.085,"y":-2.415,"yaw":1.533}]'
+        )
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]["x"], -2.085)
+        for invalid in (
+            '[]',
+            '[{"x":0,"y":0}]',
+            '[{"x":0,"y":0,"yaw":NaN}]',
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    parse_observation_plan(invalid)
 
 
 if __name__ == '__main__':
