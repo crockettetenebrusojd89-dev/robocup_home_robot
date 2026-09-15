@@ -15,6 +15,8 @@ from run_trial import _class_seen
 from run_trial import _cluster_seen
 from run_trial import _observation_window
 from run_trial import _stage_from_log
+from run_trial import _vision_telemetry
+from run_trial import _pipeline_state
 from run_trial import build_runtime_command
 from run_trial import build_scorer_command
 from run_repeatability import aggregate_summaries
@@ -160,6 +162,18 @@ class P2EvaluationTest(unittest.TestCase):
             ),
         )
 
+    def test_explicit_navigation_failure_wins_over_transient_map_warning(self):
+        log = "\n".join((
+            "Timed out waiting for transform from base_link to map",
+            "Nav2 lifecycle stack is active.",
+            "Goal accepted: navigating to living room.",
+            "Living room navigation failed. Status: ABORTED (6).",
+        ))
+        self.assertEqual(
+            _stage_from_log(log, False),
+            ("navigation", "navigation did not report success"),
+        )
+
     def test_prefixed_ros_log_evidence_is_recognized(self):
         log = "\n".join(
             (
@@ -184,6 +198,57 @@ class P2EvaluationTest(unittest.TestCase):
         window = _observation_window(log)
         self.assertFalse(_class_seen(window, "coke_can"))
         self.assertTrue(_class_seen(window, "apple"))
+
+    def test_structured_telemetry_separates_visual_pipeline_stages(self):
+        before = {
+            "schema_version": 1,
+            "inference_frames": 2,
+            "classes": {"apple": {"detection_count": 99}},
+        }
+        after = {
+            "schema_version": 1,
+            "inference_frames": 42,
+            "classes": {
+                "apple": {
+                    "detection_count": 7,
+                    "depth_valid_count": 5,
+                    "depth_invalid_count": 2,
+                    "tf_success_count": 4,
+                    "tf_failure_count": 1,
+                    "clusters": [{"observations": 4, "confirmed": True}],
+                },
+                "banana": {
+                    "detection_count": 0,
+                    "depth_valid_count": 0,
+                    "depth_invalid_count": 0,
+                    "tf_success_count": 0,
+                    "tf_failure_count": 0,
+                    "clusters": [],
+                },
+            },
+        }
+        log = "\n".join((
+            "VISION_TELEMETRY " + json.dumps(before),
+            "Reset visual tracking; removed 1 clusters.",
+            "[localizer] VISION_TELEMETRY " + json.dumps(after),
+        ))
+        telemetry = _vision_telemetry(log)
+        apple = _pipeline_state(telemetry, "apple", 0)
+        banana = _pipeline_state(telemetry, "banana", 0)
+        self.assertEqual(apple["detection_status"], "detected")
+        self.assertEqual(apple["depth_status"], "valid")
+        self.assertEqual(apple["tf_status"], "success")
+        self.assertEqual(apple["cluster_status"], "formed")
+        self.assertEqual(apple["maximum_cluster_observations"], 4)
+        self.assertEqual(banana["detection_status"], "not_detected")
+        self.assertEqual(banana["depth_status"], "not_reached")
+        self.assertEqual(banana["tf_status"], "not_reached")
+        self.assertEqual(telemetry["inference_frames"], 42)
+        not_evaluated = _pipeline_state(None, "apple", 0, False)
+        self.assertEqual(
+            not_evaluated["detection_status"],
+            "not_evaluated",
+        )
 
     def test_all_four_tables_have_nonempty_legal_regions_and_distance_bounds(self):
         config = load_table_config(TABLE_CONFIG)

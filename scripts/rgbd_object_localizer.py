@@ -41,6 +41,7 @@ from formal_runtime_config import validate_model_contract
 DETECTION_LOG_PERIOD = 1.0
 CLUSTER_LOG_PERIOD = 2.0
 WARNING_LOG_PERIOD = 5.0
+VISION_TELEMETRY_MARKER = 'VISION_TELEMETRY '
 
 
 @dataclass
@@ -291,6 +292,7 @@ class RgbdObjectLocalizer(Node):
         self._next_cluster_id = 0
         self._cluster_lineages = {}
         self._same_frame_separate_pairs = set()
+        self._reset_vision_telemetry()
         self.save_answer_service = self.create_service(
             Trigger,
             '/vision/save_answer',
@@ -386,6 +388,64 @@ class RgbdObjectLocalizer(Node):
                 raise RuntimeError(
                     'Formal runtime requires a positive group_number.'
                 )
+
+    def _reset_vision_telemetry(self):
+        """Reset counters that observe, but never influence, runtime decisions."""
+        self._telemetry_inference_frames = 0
+        self._telemetry_by_class = {
+            class_name: {
+                'detection_count': 0,
+                'depth_valid_count': 0,
+                'depth_invalid_count': 0,
+                'tf_success_count': 0,
+                'tf_failure_count': 0,
+            }
+            for class_name in self.target_classes
+        }
+
+    def _vision_telemetry_snapshot(self):
+        """Copy post-decision counters and cluster state for offline evaluation."""
+        classes = {}
+        for class_name in self.target_classes:
+            counters = dict(self._telemetry_by_class[class_name])
+            counters['clusters'] = [
+                {
+                    'cluster_id': cluster.cluster_id,
+                    'observations': cluster.observation_count,
+                    'confirmed': (
+                        cluster.observation_count >= self.min_confirmations
+                    ),
+                    'x': float(cluster.x),
+                    'y': float(cluster.y),
+                    'z': float(cluster.z),
+                }
+                for cluster in sorted(
+                    self._clusters,
+                    key=lambda item: item.cluster_id,
+                )
+                if cluster.class_name == class_name
+            ]
+            classes[class_name] = counters
+        return {
+            'schema_version': 1,
+            'inference_frames': self._telemetry_inference_frames,
+            'classes': classes,
+        }
+
+    def _log_vision_telemetry(self):
+        """Emit best-effort diagnostics without affecting answer generation."""
+        try:
+            payload = json.dumps(
+                self._vision_telemetry_snapshot(),
+                allow_nan=False,
+                separators=(',', ':'),
+            )
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            self.get_logger().warning(
+                f'Vision telemetry unavailable; runtime result is unchanged: {error}'
+            )
+            return
+        self.get_logger().info(VISION_TELEMETRY_MARKER + payload)
 
     def _warn_throttled(self, key, message):
         now = time.monotonic()
@@ -993,6 +1053,7 @@ class RgbdObjectLocalizer(Node):
                 for class_name in self.target_classes
             ]
             self.get_logger().info('\n'.join(['Final results:', *counts]))
+            self._log_vision_telemetry()
             output_path = self._write_answer_snapshot(snapshot)
         except (OSError, TypeError, ValueError) as error:
             response.success = False
@@ -1020,6 +1081,7 @@ class RgbdObjectLocalizer(Node):
         self._cluster_lineages.clear()
         self._same_frame_separate_pairs.clear()
         self._last_cluster_log = None
+        self._reset_vision_telemetry()
         response.success = True
         response.message = f'Reset visual tracking; removed {removed_count} clusters.'
         self.get_logger().info(response.message)
@@ -1125,13 +1187,19 @@ class RgbdObjectLocalizer(Node):
             return
 
         detections = self._extract_detections(results[0])
+        self._telemetry_inference_frames += 1
         annotated_image = bgr_image.copy()
         localizations = []
         for detection in detections:
             class_name, confidence, _, _, _, _ = detection
+            telemetry = self._telemetry_by_class.get(class_name)
+            if telemetry is not None:
+                telemetry['detection_count'] += 1
             depth_result = self._median_bbox_depth(depth_image, detection)
             localized = None
             if depth_result is None:
+                if telemetry is not None:
+                    telemetry['depth_invalid_count'] += 1
                 self._warn_throttled(
                     f'depth_{class_name}',
                     f'{class_name}: too few valid depth pixels in central bbox ROI; '
@@ -1139,18 +1207,24 @@ class RgbdObjectLocalizer(Node):
                 )
             else:
                 u, v, depth, valid_count = depth_result
+                if telemetry is not None:
+                    telemetry['depth_valid_count'] += 1
                 camera_point = self._camera_point(
                     u, v, depth, camera_info, rgb_message.header.stamp
                 )
                 try:
                     target_point = self._transform_to_target(camera_point)
                 except TransformException as error:
+                    if telemetry is not None:
+                        telemetry['tf_failure_count'] += 1
                     self._warn_throttled(
                         'tf',
                         f'TF {camera_point.header.frame_id} -> '
                         f'{self.target_frame} unavailable at image timestamp: {error}',
                     )
                 else:
+                    if telemetry is not None:
+                        telemetry['tf_success_count'] += 1
                     localized = {
                         'class_name': class_name,
                         'confidence': confidence,

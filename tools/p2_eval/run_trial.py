@@ -20,6 +20,7 @@ from p2_eval_core import EvaluationConfigError, generate_trial
 
 
 MATCH_THRESHOLD_M = 0.10
+VISION_TELEMETRY_MARKER = "VISION_TELEMETRY "
 RUNTIME_INPUT_KEYS = {
     "world_file",
     "world_name",
@@ -145,6 +146,8 @@ def _stage_from_log(log: str, timed_out: bool) -> tuple[str, str | None]:
         return "timeout", "formal runtime exceeded its configured time limit"
     if "Formal base task succeeded:" in log:
         return "success", None
+    if "Living room navigation failed." in log:
+        return "navigation", "navigation did not report success"
     if (
         "Timed out waiting for transform from base_link to map" in log
         or 'Invalid frame ID "map"' in log
@@ -209,6 +212,91 @@ def _observation_window(log: str) -> str:
     return log[start:] if start >= 0 else ""
 
 
+def _vision_telemetry(log: str) -> Mapping[str, Any] | None:
+    """Return the final post-reset, observational telemetry record."""
+    records = []
+    for line in _observation_window(log).splitlines():
+        if VISION_TELEMETRY_MARKER not in line:
+            continue
+        payload = line.split(VISION_TELEMETRY_MARKER, 1)[1].strip()
+        try:
+            record = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records[-1] if records else None
+
+
+def _pipeline_state(
+    telemetry: Mapping[str, Any] | None,
+    class_name: str,
+    final_answer_count: int,
+    vision_evaluated: bool = True,
+) -> dict[str, Any]:
+    """Convert exact stage counters into one class-level offline diagnosis."""
+    if telemetry is None:
+        status = "unknown" if vision_evaluated else "not_evaluated"
+        return {
+            "telemetry_available": False,
+            "inference_frames": None,
+            "detection_status": status,
+            "depth_status": status,
+            "tf_status": status,
+            "cluster_status": status,
+            "final_answer_status": (
+                "present" if final_answer_count else "absent"
+            ),
+        }
+    raw = telemetry.get("classes", {}).get(class_name, {})
+    detections = int(raw.get("detection_count", 0))
+    depth_valid = int(raw.get("depth_valid_count", 0))
+    depth_invalid = int(raw.get("depth_invalid_count", 0))
+    tf_success = int(raw.get("tf_success_count", 0))
+    tf_failure = int(raw.get("tf_failure_count", 0))
+    clusters = raw.get("clusters", [])
+    cluster_observations = [
+        int(cluster.get("observations", 0))
+        for cluster in clusters
+        if isinstance(cluster, dict)
+    ]
+    return {
+        "telemetry_available": True,
+        "inference_frames": int(telemetry.get("inference_frames", 0)),
+        "detection_status": "detected" if detections else "not_detected",
+        "detection_count": detections,
+        "depth_status": (
+            "valid" if depth_valid else
+            "invalid" if detections else
+            "not_reached"
+        ),
+        "depth_valid_count": depth_valid,
+        "depth_invalid_count": depth_invalid,
+        "tf_status": (
+            "success" if tf_success else
+            "failed" if depth_valid else
+            "not_reached"
+        ),
+        "tf_success_count": tf_success,
+        "tf_failure_count": tf_failure,
+        "cluster_status": "formed" if clusters else "not_formed",
+        "cluster_count": len(clusters),
+        "confirmed_cluster_count": sum(
+            bool(cluster.get("confirmed"))
+            for cluster in clusters
+            if isinstance(cluster, dict)
+        ),
+        "maximum_cluster_observations": (
+            max(cluster_observations) if cluster_observations else 0
+        ),
+        "clusters": clusters,
+        "final_answer_status": (
+            "present" if final_answer_count else "absent"
+        ),
+        "final_answer_count": final_answer_count,
+    }
+
+
 def summarize_trial(
     metadata: Mapping[str, Any],
     answer_path: Path,
@@ -222,6 +310,7 @@ def summarize_trial(
 ) -> dict[str, Any]:
     log = runtime_log_path.read_text(encoding="utf-8", errors="replace")
     observation_log = _observation_window(log)
+    telemetry = _vision_telemetry(log)
     failure_stage, failure_reason = _stage_from_log(log, timed_out)
     answer = _read_json(answer_path) if answer_path.is_file() else None
     details = (
@@ -266,9 +355,17 @@ def summarize_trial(
             None,
         )
         class_submitted = submitted_objects.get(class_name, [])
-        localization_pipeline_success = _class_seen(
-            observation_log,
+        pipeline = _pipeline_state(
+            telemetry,
             class_name,
+            len(class_submitted),
+            scan_success,
+        )
+        telemetry_available = pipeline["telemetry_available"]
+        localization_pipeline_success = (
+            pipeline.get("tf_success_count", 0) > 0
+            if telemetry_available
+            else _class_seen(observation_log, class_name)
         )
         object_results.append(
             {
@@ -280,20 +377,28 @@ def summarize_trial(
                 "ground_truth_world_m": truth["world_position_m"],
                 "scan_stand_distance_m": truth["scan_stand_distance_m"],
                 "detection_success": (
-                    True if localization_pipeline_success else None
+                    pipeline.get("detection_count", 0) > 0
+                    if telemetry_available else
+                    (True if localization_pipeline_success else None)
                 ),
                 "depth_valid": (
-                    True if localization_pipeline_success else None
+                    pipeline.get("depth_valid_count", 0) > 0
+                    if telemetry_available else
+                    (True if localization_pipeline_success else None)
                 ),
                 "tf_success": (
-                    True if localization_pipeline_success else None
+                    pipeline.get("tf_success_count", 0) > 0
+                    if telemetry_available else
+                    (True if localization_pipeline_success else None)
                 ),
                 "localization_pipeline_success": (
                     localization_pipeline_success
                 ),
                 "cluster_formed": (
-                    _cluster_seen(observation_log, class_name)
-                    or bool(class_submitted)
+                    pipeline.get("cluster_count", 0) > 0
+                    if telemetry_available else
+                    (_cluster_seen(observation_log, class_name)
+                     or bool(class_submitted))
                 ),
                 "entered_final_answer": (
                     bool(match)
@@ -303,11 +408,14 @@ def summarize_trial(
                 "localization_error_m": (
                     match.get("distance_m") if match else None
                 ),
+                "pipeline_telemetry": pipeline,
                 "evidence_scope_note": (
-                    "A localized class proves detection+depth+TF. Without a "
-                    "localization, the frozen log cannot distinguish detector, "
-                    "depth, or TF failure, so those fields are null. Cluster is "
-                    "class-level; TP/error are scorer one-to-one evidence."
+                    "Structured counters separate detection, depth, and TF "
+                    "when telemetry is available. Cluster evidence is "
+                    "class-level; TP/error remain scorer one-to-one evidence."
+                    if telemetry_available else
+                    "Without structured telemetry, a missing localization "
+                    "cannot be separated into detector, depth, or TF failure."
                 ),
             }
         )
@@ -334,6 +442,12 @@ def summarize_trial(
             "FN": report.get("false_negative", truth_count),
             "score": report.get("score", 0.0),
             "matches": report.get("matches", []),
+            "pipeline_telemetry": _pipeline_state(
+                telemetry,
+                class_name,
+                len(submitted_objects.get(class_name, [])),
+                scan_success,
+            ),
         }
         total_tp += entry["TP"]
         total_fp += entry["FP"]
@@ -394,6 +508,7 @@ def summarize_trial(
         "runtime_wall_seconds": runtime_seconds,
         "total_wall_seconds": total_seconds,
         "match_threshold_m": MATCH_THRESHOLD_M,
+        "vision_telemetry": telemetry,
         "vision_score": vision_score,
         "navigation_score": 40.0 if navigation_success else 0.0,
         "base_task_score": vision_score + (40.0 if navigation_success else 0.0),

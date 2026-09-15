@@ -51,8 +51,23 @@ def input_hashes(source_trial_dir: Path, model_path: Path) -> dict[str, str]:
 
 def class_row(summary: Mapping[str, Any], class_name: str) -> dict[str, Any]:
     report = summary["classes"][class_name]
+    telemetry = report.get("pipeline_telemetry", {})
     matches = report.get("matches", [])
     return {
+        "detection": telemetry.get("detection_status", "unknown"),
+        "detection_count": telemetry.get("detection_count"),
+        "depth": telemetry.get("depth_status", "unknown"),
+        "depth_valid_count": telemetry.get("depth_valid_count"),
+        "depth_invalid_count": telemetry.get("depth_invalid_count"),
+        "tf": telemetry.get("tf_status", "unknown"),
+        "tf_success_count": telemetry.get("tf_success_count"),
+        "tf_failure_count": telemetry.get("tf_failure_count"),
+        "cluster": telemetry.get("cluster_status", "unknown"),
+        "cluster_count": telemetry.get("cluster_count"),
+        "max_cluster_observations": telemetry.get(
+            "maximum_cluster_observations"
+        ),
+        "final_answer": telemetry.get("final_answer_status", "unknown"),
         "TP": int(report["TP"]),
         "FP": int(report["FP"]),
         "FN": int(report["FN"]),
@@ -111,11 +126,67 @@ def aggregate_summaries(summaries: Sequence[Mapping[str, Any]]) -> dict[str, Any
             for item, summary in zip(object_evidence, summaries)
             if summary["scan_completed"]
         ]
+        telemetry_by_run = [
+            summary["classes"][class_name].get("pipeline_telemetry", {})
+            for summary in summaries
+        ]
+        observable_telemetry = [
+            item for item in telemetry_by_run
+            if item.get("telemetry_available")
+        ]
         class_statistics[class_name] = {
-            "raw_detection_success_rate": None,
+            "raw_detection_success_rate": (
+                _rate([
+                    item.get("detection_count", 0) > 0
+                    for item in observable_telemetry
+                ])
+                if observable_telemetry else None
+            ),
             "raw_detection_observability": (
-                "not independently observable: a missing localization cannot "
-                "be separated into detector, depth, or TF failure"
+                "structured post-reset counters"
+                if observable_telemetry else
+                "not independently observable: telemetry unavailable"
+            ),
+            "detection_status_by_run": [
+                item.get("detection_status", "unknown")
+                for item in telemetry_by_run
+            ],
+            "depth_status_by_run": [
+                item.get("depth_status", "unknown")
+                for item in telemetry_by_run
+            ],
+            "tf_status_by_run": [
+                item.get("tf_status", "unknown")
+                for item in telemetry_by_run
+            ],
+            "cluster_status_by_run": [
+                item.get("cluster_status", "unknown")
+                for item in telemetry_by_run
+            ],
+            "final_answer_status_by_run": [
+                item.get("final_answer_status", "unknown")
+                for item in telemetry_by_run
+            ],
+            "depth_valid_success_rate": (
+                _rate([
+                    item.get("depth_valid_count", 0) > 0
+                    for item in observable_telemetry
+                ])
+                if observable_telemetry else None
+            ),
+            "tf_success_rate": (
+                _rate([
+                    item.get("tf_success_count", 0) > 0
+                    for item in observable_telemetry
+                ])
+                if observable_telemetry else None
+            ),
+            "cluster_formed_rate": (
+                _rate([
+                    item.get("cluster_count", 0) > 0
+                    for item in observable_telemetry
+                ])
+                if observable_telemetry else None
             ),
             "visual_stage_evaluable_runs": len(vision_evidence),
             "end_to_end_localization_success_rate": _rate([
@@ -246,6 +317,10 @@ def run_once(
         ],
         "runtime_command": shlex.join(runtime_command),
         "scoring_starts_only_after_runtime_exit": True,
+        "telemetry_boundary": (
+            "post-decision target-stage counters are written to the runtime "
+            "log; telemetry receives no ground truth and controls no runtime state"
+        ),
     }
     audit_path = run_dir / "isolation_audit.json"
     _write_json(audit_path, audit)
@@ -302,6 +377,15 @@ def run_once(
     summary["immutable_inputs_unchanged"] = (
         summary["input_hashes_after"] == expected_hashes
     )
+    if summary["scan_completed"] and summary.get("vision_telemetry") is None:
+        raise EvaluationConfigError(
+            f"{run_id}: structured vision telemetry was not emitted"
+        )
+    telemetry_path = run_dir / "vision_telemetry.json"
+    _write_json(
+        telemetry_path,
+        summary.get("vision_telemetry") or {"telemetry_available": False},
+    )
     summary["artifacts"].update({
         "scenario_world": str((source_trial_dir / "scenario.world").resolve()),
         "ground_truth": str((source_trial_dir / "ground_truth.json").resolve()),
@@ -309,6 +393,7 @@ def run_once(
             (source_trial_dir / "scenario_metadata.json").resolve()
         ),
         "isolation_audit": str(audit_path.resolve()),
+        "vision_telemetry": str(telemetry_path.resolve()),
     })
     _write_json(run_dir / "summary.json", summary)
     (run_dir / "wall_clock_seconds.txt").write_text(
