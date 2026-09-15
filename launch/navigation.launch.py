@@ -3,7 +3,6 @@
 import os
 from pathlib import Path
 import re
-import shlex
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -49,6 +48,21 @@ def _resolve_world_file(value):
     return world_path
 
 
+def _gazebo_command(world_path):
+    """Run one headless server directly so launch owns the simulator process."""
+    return [
+        'ign',
+        'gazebo',
+        '-r',
+        '-s',
+        '-v',
+        '2',
+        str(world_path),
+        '--force-version',
+        '6',
+    ]
+
+
 def _select_world_launch(context, world_share):
     """Use the packaged example or pass an official file directly to Gazebo."""
     _validated_world_name(context)
@@ -65,16 +79,13 @@ def _select_world_launch(context, world_share):
             )
         ]
 
-    ros_gz_share = get_package_share_directory('ros_gz_sim')
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(ros_gz_share, 'launch', 'gz_sim.launch.py')
+    gazebo = ExecuteProcess(
+        cmd=_gazebo_command(world_path),
+        name='gazebo_server',
+        output='screen',
+        on_exit=EmitEvent(
+            event=Shutdown(reason='Gazebo server exited')
         ),
-        launch_arguments={
-            'gz_args': shlex.join(['-r', '-v', '2', str(world_path)]),
-            'gz_version': '6',
-            'on_exit_shutdown': 'true',
-        }.items(),
     )
     clock_bridge = Node(
         package='ros_gz_bridge',
@@ -301,6 +312,8 @@ def generate_launch_description():
             [
                 franka_share_parent,
                 os.pathsep,
+                os.path.join(world_share, 'models'),
+                os.pathsep,
                 EnvironmentVariable('GZ_SIM_RESOURCE_PATH', default_value=''),
             ],
         ),
@@ -308,6 +321,8 @@ def generate_launch_description():
             'IGN_GAZEBO_RESOURCE_PATH',
             [
                 franka_share_parent,
+                os.pathsep,
+                os.path.join(world_share, 'models'),
                 os.pathsep,
                 EnvironmentVariable(
                     'IGN_GAZEBO_RESOURCE_PATH', default_value=''
