@@ -75,7 +75,8 @@ stop before full generation or training.
   near-duplicate train/val overlap were all zero.
 - Corrected beer was visibly textured in manual previews; across 12 primary
   boxes its near-black fraction was 22.12% median and 26.71% maximum, compared
-  with 95.4% median in invalid V1 evidence.
+  with 95.4% median in invalid V1 evidence. The formal plan rejects any beer
+  crop whose near-black fraction exceeds 50%.
 - V1 audit found 151 train and 33 val images containing old beer. Whole-image
   removal leaves 1,649 train and 327 val replay images. Adding the frozen
   570/154 targeted plan yields exactly 2,700 images after later composition.

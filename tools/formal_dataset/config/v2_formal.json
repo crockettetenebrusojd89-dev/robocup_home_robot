@@ -462,6 +462,6 @@
   },
   "beer_visual_check": {
     "near_black_channel_threshold": 40,
-    "max_near_black_fraction": 0.75
+    "max_near_black_fraction": 0.50
   }
 }
