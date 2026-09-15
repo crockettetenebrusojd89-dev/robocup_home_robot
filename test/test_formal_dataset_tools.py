@@ -7,9 +7,11 @@ import math
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 import generate_dataset
+import compose_dataset_v2
 import prepare_v2_assets
 import validate_dataset
 import v2_common
@@ -183,6 +185,26 @@ class FormalDatasetToolsTest(unittest.TestCase):
                 sum(item['split'] == split and item['negative'] for item in plan),
                 config['negative_samples'][split],
             )
+        for item in plan:
+            if item['secondary'] is None:
+                continue
+            self.assertTrue(v2_common.secondary_preserves_primary_visibility(
+                item['camera']['position_world_m'][:2],
+                item['primary']['position_world_m'][:2],
+                item['secondary']['position_world_m'][:2],
+                0.18,
+            ))
+
+    def test_secondary_visibility_guard_rejects_the_formal_failure_geometry(self):
+        camera = (38.5652032469, -0.2009922575)
+        primary = (40.4734802972, -0.0423429749)
+        occluding_secondary = (39.5247707569, -0.0891949644)
+        self.assertFalse(v2_common.secondary_preserves_primary_visibility(
+            camera, primary, occluding_secondary, 0.18
+        ))
+        self.assertTrue(v2_common.secondary_preserves_primary_visibility(
+            camera, primary, (39.6, 0.25), 0.18
+        ))
 
     def test_v2_lighting_values_must_match_the_declared_profile(self):
         config = v2_common.load_v2_config(
@@ -217,6 +239,88 @@ class FormalDatasetToolsTest(unittest.TestCase):
             path = Path(temporary) / 'negative.txt'
             path.write_text('', encoding='utf-8')
             self.assertEqual(validate_dataset._read_boxes(path, set(range(18))), [])
+
+    def test_composition_removes_whole_beer_images_and_preserves_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            v1 = root / 'v1'
+            targeted = root / 'targeted'
+            output = root / 'final'
+            class_document = {'classes': self.classes}
+            for dataset in (v1, targeted):
+                for split in ('train', 'val'):
+                    (dataset / 'images' / split).mkdir(parents=True)
+                    (dataset / 'labels' / split).mkdir(parents=True)
+                (dataset / 'classes.json').write_text(
+                    json.dumps(class_document, indent=2) + '\n', encoding='utf-8'
+                )
+                (dataset / 'generation_config.json').write_text('{}\n', encoding='utf-8')
+
+            def sample(dataset, split, stem, label, payload):
+                (dataset / 'images' / split / f'{stem}.png').write_bytes(payload)
+                (dataset / 'labels' / split / f'{stem}.txt').write_text(
+                    label, encoding='utf-8'
+                )
+
+            sample(v1, 'train', 'sample', '0 0.5 0.5 0.2 0.2\n', b'v1-train-clean')
+            sample(v1, 'train', 'old_beer', '2 0.5 0.5 0.2 0.2\n', b'v1-train-beer')
+            sample(v1, 'val', 'sample', '3 0.5 0.5 0.2 0.2\n', b'v1-val-clean')
+            sample(v1, 'val', 'old_beer', '0 0.2 0.2 0.1 0.1\n2 0.6 0.6 0.2 0.2\n', b'v1-val-beer')
+            sample(targeted, 'train', 'sample', '', b'v2-train-negative')
+            sample(targeted, 'val', 'val_sample', '1 0.5 0.5 0.2 0.2\n', b'v2-val-positive')
+            scenarios = [
+                {'sample_id': 'sample', 'split': 'train', 'negative': True,
+                 'scene_group_id': 'train:negative:0'},
+                {'sample_id': 'val_sample', 'split': 'val', 'negative': False,
+                 'scene_group_id': 'val:banana:0'},
+            ]
+            (targeted / 'scenario_manifest.jsonl').write_text(
+                ''.join(json.dumps(item) + '\n' for item in scenarios), encoding='utf-8'
+            )
+            (targeted / 'asset_manifest.json').write_text('{}\n', encoding='utf-8')
+            (targeted / 'capture_plan.tsv').write_text('header\n', encoding='utf-8')
+
+            counts = {
+                'EXPECTED_V1_IMAGES': {'train': 2, 'val': 2},
+                'EXPECTED_REMOVED_BEER_IMAGES': {'train': 1, 'val': 1},
+                'EXPECTED_CLEAN_REPLAY': {'train': 1, 'val': 1},
+                'EXPECTED_TARGETED': {'train': 1, 'val': 1},
+                'EXPECTED_FINAL': {'train': 2, 'val': 2},
+            }
+            with mock.patch.multiple(compose_dataset_v2, **counts), mock.patch.object(
+                compose_dataset_v2.subprocess, 'run'
+            ):
+                summary = compose_dataset_v2.compose(
+                    v1, targeted, output, self.manifest_path
+                )
+
+            records = compose_dataset_v2._read_jsonl(
+                output / 'dataset_composition_manifest.jsonl'
+            )
+            self.assertEqual(summary['actual']['final_images'], {'train': 2, 'val': 2})
+            self.assertEqual(len(records), 4)
+            self.assertEqual(
+                {record['source'] for record in records},
+                {'legacy_v1_replay', 'v2_targeted'},
+            )
+            self.assertFalse(any('old_beer' in record['sample_id'] for record in records))
+            self.assertTrue((output / 'images' / 'train' / 'legacy_v1_train_sample.png').is_file())
+            self.assertTrue(
+                (output / 'images' / 'train' / 'v2_targeted_train_sample.png').is_file()
+            )
+            excluded = compose_dataset_v2._read_jsonl(
+                output / 'metadata' / 'excluded_legacy_beer.jsonl'
+            )
+            self.assertEqual(len(excluded), 2)
+            self.assertTrue(all(2 in record['class_ids'] for record in excluded))
+            self.assertEqual(
+                (output / 'metadata' / 'validation_subsets' / 'negative_val.txt').read_text(),
+                '',
+            )
+            self.assertEqual(
+                (output / 'metadata' / 'validation_subsets' / 'targeted_val.txt').read_text(),
+                'images/val/v2_targeted_val_val_sample.png\n',
+            )
 
     def test_prepare_v2_assets_preserves_source_and_installs_pbr_beer(self):
         with tempfile.TemporaryDirectory() as temporary:

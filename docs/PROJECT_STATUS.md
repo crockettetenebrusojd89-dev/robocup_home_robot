@@ -12,9 +12,9 @@ identified model generalization as the immediate blocker.
 
 ## Current Goal
 
-Generate the reviewed Formal Model V2 targeted supplement with the corrected
-beer asset, compose it with clean V1 replay, then train and re-audit one unified
-18-class checkpoint without changing the frozen competition runtime parameters.
+Train and re-audit one unified 18-class Formal Model V2 checkpoint from the
+completed, validated 2,700-image dataset, but only after explicit approval and
+without changing the frozen competition runtime parameters.
 
 ## Open Problems
 
@@ -28,13 +28,15 @@ beer asset, compose it with clean V1 replay, then train and re-audit one unified
   2/15, corrected beer 0/15, and master_chef_can 8/15. Coke_can,
   pudding_box, and tomato_soup_can each passed 4/5. In the existing beer
   training set, 183/184 labelled boxes are majority near-black, unlike the
-  corrected rendered asset. The 45-image V2 pipeline smoke passed all quotas,
-  asset checks, declared empty negatives, and train/val leakage checks; its 12
-  corrected beer crops had 22.12% median and 26.71% maximum near-black pixels.
-- **Next step:** After explicit approval, generate the frozen 724-image
-  targeted plan, compose it with the 1,976 clean V1 replay images, validate the
-  resulting 2,700-image unified dataset, then fine-tune from V1 `best.pt` and
-  repeat the unchanged robustness audit.
+  corrected rendered asset. The completed 724-image targeted supplement passed
+  all quota, asset, empty-negative, and leakage gates; all 225 corrected beer
+  crops passed the 50% black-fraction gate (19.86% median, 27.54% maximum).
+  Removing all 184 V1 frames containing old beer and composing the remaining
+  1,976 replay frames produced a validated 2,700-image dataset (2,219 train,
+  481 val) with zero old-beer replay frames.
+- **Next step:** After explicit approval, fine-tune all 18 classes from V1
+  `best.pt`, report overall, legacy, targeted, and negative validation results
+  separately, then repeat the unchanged P1/P2 robustness audit.
 
 ### P-002 — Competition-like full-chain reliability is not established
 
@@ -124,9 +126,9 @@ beer asset, compose it with clean V1 replay, then train and re-audit one unified
 
 ## Next Step
 
-Work on P-001 only: after approval, generate the reviewed targeted V2 data,
-compose clean replay, train one unified 18-class model, and re-run the unchanged
-robustness audit. Do not alter
+Work on P-001 only: after explicit approval, train one unified 18-class model
+from the completed Formal V2 dataset and re-run the unchanged robustness audit.
+Do not alter
 confidence 0.50, depth/TF, online or final deduplication, final confirmation,
 Nav2, corner handling, FR3/MoveIt, or the candidate viewpoints as part of this
 model correction.

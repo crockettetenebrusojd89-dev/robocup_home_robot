@@ -113,6 +113,33 @@ replay must first be composed into the final unified 18-class training dataset.
 The unchanged P2 robustness scenes remain an external test gate and must never
 be copied into either split.
 
+After the targeted dataset passes its validator and manual previews, compose
+the final dataset without re-encoding image bytes:
+
+```bash
+python3 scripts/compose_dataset_v2.py \
+  --v1 ~/robocup_assets/datasets/formal_objects_v1 \
+  --targeted ~/robocup_assets/datasets/formal_objects_v2_targeted_20260915 \
+  --output ~/robocup_assets/datasets/formal_objects_v2
+```
+
+The composer validates both sources first, removes the entire image/label pair
+for every V1 frame containing class `beer`, and hard-links all retained bytes
+under collision-proof source/split prefixes. It refuses count drift from the
+reviewed 1,649/327 replay and 570/154 targeted contract. The final
+`dataset_composition_manifest.jsonl` identifies every sample as
+`legacy_v1_replay` or `v2_targeted`; `validation_subset` further distinguishes
+`legacy_val`, `targeted_val`, and `negative_val`. Preserved configs, asset and
+scenario manifests, excluded-old-beer evidence, and validation subset lists
+are under `metadata/`.
+
+Running the normal validator on the composed root checks the 2,700-image
+contract, hard-linked content hashes, filename uniqueness, exact and perceptual
+train/val leakage, targeted scene groups and quotas, empty negative labels,
+zero beer in legacy replay, and the corrected-beer black-fraction gate. This is
+also the validator invoked by `train_model.py`, so a composed dataset must pass
+before training can start.
+
 ## Full first-pass dataset
 
 ```bash

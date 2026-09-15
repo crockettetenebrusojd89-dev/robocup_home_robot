@@ -325,10 +325,62 @@ confirmed a visible colored label and aligned box. Far/problem-yaw banana,
 mid/far multi-yaw master_chef_can, edge/corner placement, lighting variants,
 and empty tables were also visually present with aligned labels.
 
-The reviewed formal plan contains 724 new frames but was not run: 570 train
+At the time of the smoke gate, the reviewed formal plan contained 724 new
+frames and had not yet been run: 570 train
 and 154 val, comprising corrected beer 180/45, banana 144/36,
 master_chef_can 108/27, each borderline class 36/12, plus 30/10 negatives.
 Removing every V1 image containing old beer leaves 1,649 train and 327 val
 replay images. The eventual composition would therefore contain exactly 2,700
 images while retaining clean replay from all 17 non-beer classes. Dataset
-composition and unified training remain separate, explicitly unstarted steps.
+composition and unified training were still separate, unstarted steps. The
+following section records their later data-only completion; unified training
+remains unstarted.
+
+## Formal Model V2 dataset completion, 2026-09-15
+
+The formal targeted run is complete at
+`~/robocup_assets/datasets/formal_objects_v2_targeted_20260915`: 570 train and
+154 val frames, including 30/10 declared empty negatives. The first attempt was
+stopped at train sample 260 because a secondary pitcher geometrically occluded
+the primary beer. The partial run was retained as evidence under the suffixed
+`failed_train000260` directory. A deterministic primary sight-corridor guard
+was added, including a regression test for that exact camera/object geometry;
+the fresh run then completed all 724 captures.
+
+Actual primary distributions match the reviewed plan. Corrected beer has 225
+frames with near/mid/far and center/edge/corner each 75, all twelve 30-degree
+yaw bins at 18 or 19 frames, and four backgrounds and light profiles at 56 or
+57 frames each. Banana has 26/51/103 near/mid/far frames, 25/77/78
+center/edge/corner frames, and 34 frames in each problem-yaw bin at 270, 300,
+and 330 degrees; its smallest primary box is 66 pixels. Master_chef_can has
+16/51/68 near/mid/far and 27/54/54 center/edge/corner frames with all eight yaw
+bins covered. Coke_can, pudding_box, and tomato_soup_can each have 48 frames,
+39 far and 9 mid, with balanced cardinal yaws and all backgrounds/lights.
+
+The targeted validator reports zero scene-group, exact-image, exact
+background-light, and annotation-aware perceptual train/val overlap. All 225
+corrected beer boxes pass the 50% near-black gate: median 19.86%, maximum
+27.54%. Manual contact-sheet inspection covered beer distance/light/yaw,
+far/problem-yaw/small banana, mid/far/multi-yaw master_chef_can, the three
+borderline far classes, and negatives. Targets and boxes were aligned, beer
+texture remained visible, lighting remained competition-like, and no systematic
+cutoff or rendering defect was found.
+
+The final composed dataset is
+`~/robocup_assets/datasets/formal_objects_v2`. It removes the entire image and
+label pair for 151 V1 train and 33 V1 val frames containing old beer, preserving
+1,649/327 clean V1 replay frames and adding the unchanged 570/154 targeted
+splits. The result is exactly 2,219 train and 481 val images. Every retained
+image is hard-linked to its source without re-encoding, and source/split
+prefixes prevent name collisions.
+
+`dataset_composition_manifest.jsonl` records source paths, hashes, class IDs,
+negative state, split, validation subset, and targeted scene group for all
+2,700 frames. Separate validation lists preserve 327 legacy val, 144 targeted
+positive val, and 10 targeted negative val frames. The composed validator
+confirmed zero old-beer replay frames, zero filename collisions, valid empty
+labels, the exact 18-class mapping, corrected beer asset and black-fraction
+gates, targeted quotas, and zero exact, annotation-aware perceptual, or targeted
+scene-group train/val leakage. Ultralytics accepted `data.yaml` with 18 classes
+and the expected train/val roots. No checkpoint was loaded and no training or
+runtime change was performed.

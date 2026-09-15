@@ -233,7 +233,8 @@ def _validate_lighting(sample_id: str, lighting: object, profiles: dict[str, dic
     if not profile['main_intensity'][0] <= main_intensity <= profile['main_intensity'][1]:
         raise ValueError(f'{sample_id}: main light intensity is outside its profile')
     fill_intensity = float(lighting['ambient_fill_intensity'])
-    if not profile['ambient_fill_intensity'][0] <= fill_intensity <= profile['ambient_fill_intensity'][1]:
+    fill_low, fill_high = profile['ambient_fill_intensity']
+    if not fill_low <= fill_intensity <= fill_high:
         raise ValueError(f'{sample_id}: ambient fill intensity is outside its profile')
     return (
         profile_id,
@@ -339,9 +340,12 @@ def validate_v2_dataset(root: Path, classes: list[dict]) -> None:
         if digest in split_digests[split]:
             raise ValueError(f'{split}: duplicate image content at {image_path}')
         split_digests[split].add(digest)
-        split_lighting[split].add(
-            (record['background']['id'], _validate_lighting(sample_id, record['lighting'], profiles))
+        lighting_signature = _validate_lighting(
+            sample_id, record['lighting'], profiles
         )
+        split_lighting[split].add((
+            record['background']['id'], lighting_signature
+        ))
         with Image.open(image_path) as image:
             if image.size != (640, 480):
                 raise ValueError(f'{sample_id}: expected 640x480 image')
@@ -371,7 +375,10 @@ def validate_v2_dataset(root: Path, classes: list[dict]) -> None:
                     raise ValueError(f'{sample_id}: primary class mapping is invalid')
                 if class_id not in {item['class_id'] for item in boxes}:
                     raise ValueError(f'{sample_id}: primary class is absent from labels')
-                if primary['asset_tree_sha256'] != asset_manifest['classes'][class_name]['tree_sha256']:
+                expected_asset_hash = asset_manifest['classes'][class_name][
+                    'tree_sha256'
+                ]
+                if primary['asset_tree_sha256'] != expected_asset_hash:
                     raise ValueError(f'{sample_id}: primary asset hash is invalid')
                 primary_counts[split][class_name] += 1
                 actual = quota_actual[split][class_name]
@@ -392,17 +399,27 @@ def validate_v2_dataset(root: Path, classes: list[dict]) -> None:
                         beer_box,
                         int(config['beer_visual_check']['near_black_channel_threshold']),
                     ))
-            split_phashes[split].append((sample_id, phash))
+            split_phashes[split].append((
+                sample_id,
+                phash,
+                tuple(item['class_id'] for item in boxes),
+            ))
 
     if split_groups['train'] & split_groups['val']:
         raise ValueError('scene_group_id leakage exists between train and val')
     if split_digests['train'] & split_digests['val']:
         raise ValueError('exact image leakage exists between train and val')
     if split_lighting['train'] & split_lighting['val']:
-        raise ValueError('exact background/lighting combination leakage exists between train and val')
-    for train_id, train_hash in split_phashes['train']:
-        for val_id, val_hash in split_phashes['val']:
-            if (train_hash ^ val_hash).bit_count() <= 1:
+        raise ValueError(
+            'exact background/lighting combination leakage exists '
+            'between train and val'
+        )
+    for train_id, train_hash, train_classes in split_phashes['train']:
+        for val_id, val_hash, val_classes in split_phashes['val']:
+            if (
+                train_classes == val_classes
+                and (train_hash ^ val_hash).bit_count() <= 1
+            ):
                 raise ValueError(f'perceptual near-duplicate leakage: {train_id} / {val_id}')
 
     for split in ('train', 'val'):
@@ -431,7 +448,8 @@ def validate_v2_dataset(root: Path, classes: list[dict]) -> None:
             f'near-black fraction {max_dark:.3f}'
         )
     print(
-        f'VALID V2: images={len(records)} positives={len(records) - sum(negative_counts.values())} '
+        f'VALID V2: images={len(records)} '
+        f'positives={len(records) - sum(negative_counts.values())} '
         f'negatives={sum(negative_counts.values())}'
     )
     print(
@@ -445,8 +463,316 @@ def validate_v2_dataset(root: Path, classes: list[dict]) -> None:
     for split in ('train', 'val'):
         print(
             f'VALID {split}: images={len(expected_images[split])} '
-            f'negatives={negative_counts[split]} primary={dict(sorted(primary_counts[split].items()))}'
+            f'negatives={negative_counts[split]} '
+            f'primary={dict(sorted(primary_counts[split].items()))}'
         )
+
+
+def _load_jsonl(path: Path) -> list[dict]:
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f'{path}:{line_number}: {error}') from error
+        if not isinstance(record, dict):
+            raise ValueError(f'{path}:{line_number}: record must be an object')
+        records.append(record)
+    return records
+
+
+def validate_composed_v2_dataset(root: Path, classes: list[dict]) -> None:
+    """Validate final clean replay + targeted data and preserved provenance."""
+    summary_path = root / 'dataset_composition.json'
+    summary = json.loads(summary_path.read_text(encoding='utf-8'))
+    expected_contract = {
+        'v1_images': {'train': 1800, 'val': 360},
+        'removed_legacy_beer_images': {'train': 151, 'val': 33},
+        'clean_replay': {'train': 1649, 'val': 327},
+        'targeted': {'train': 570, 'val': 154},
+        'final': {'train': 2219, 'val': 481},
+    }
+    if summary.get('schema_version') != 1:
+        raise ValueError('dataset composition has the wrong schema version')
+    if summary.get('expected') != expected_contract:
+        raise ValueError('dataset composition count contract differs')
+    if summary.get('link_mode') != 'hardlink':
+        raise ValueError('dataset composition did not preserve source bytes with hardlinks')
+
+    metadata = root / 'metadata'
+    config_path = metadata / 'targeted_generation_config.json'
+    asset_path = metadata / 'targeted_asset_manifest.json'
+    scenarios_path = metadata / 'targeted_scenario_manifest.jsonl'
+    capture_plan_path = metadata / 'targeted_capture_plan.tsv'
+    source_hashes = summary.get('source_metadata_sha256', {})
+    targeted_hashes = source_hashes.get('v2_targeted', {})
+    copied_targeted = {
+        'generation_config.json': config_path,
+        'asset_manifest.json': asset_path,
+        'scenario_manifest.jsonl': scenarios_path,
+        'capture_plan.tsv': capture_plan_path,
+    }
+    for source_name, path in copied_targeted.items():
+        if sha256_file(path) != targeted_hashes.get(source_name):
+            raise ValueError(f'copied targeted metadata hash differs: {source_name}')
+    if sha256_file(root / 'classes.json') != targeted_hashes.get('classes.json'):
+        raise ValueError('composed classes.json bytes differ from targeted source')
+    legacy_config = metadata / 'legacy_v1_generation_config.json'
+    legacy_config_hash = source_hashes.get('legacy_v1', {}).get(
+        'generation_config.json'
+    )
+    if sha256_file(legacy_config) != legacy_config_hash:
+        raise ValueError('copied V1 generation config hash differs')
+
+    config = load_v2_config(config_path, [item['name'] for item in classes])
+    asset_manifest = json.loads(asset_path.read_text(encoding='utf-8'))
+    beer_contract = config['asset_contract']['beer']
+    beer_files = asset_manifest.get('classes', {}).get('beer', {}).get('files', {})
+    if beer_files.get('model.sdf') != beer_contract['model_sdf_sha256']:
+        raise ValueError('composed evidence has the wrong corrected beer model hash')
+    if beer_files.get('materials/textures/beer.png') != beer_contract['texture_sha256']:
+        raise ValueError('composed evidence has the wrong beer texture hash')
+
+    records = _load_jsonl(root / 'dataset_composition_manifest.jsonl')
+    scenarios = _load_jsonl(scenarios_path)
+    scenarios_by_sample = {record.get('sample_id'): record for record in scenarios}
+    if len(scenarios_by_sample) != len(scenarios):
+        raise ValueError('targeted evidence contains duplicate sample IDs')
+    expected_total = sum(expected_contract['final'].values())
+    if len(records) != expected_total:
+        raise ValueError(
+            f'composition manifest has {len(records)} records, '
+            f'expected {expected_total}'
+        )
+
+    valid_ids = {item['yolo_id'] for item in classes}
+    class_names = {item['yolo_id']: item['name'] for item in classes}
+    beer_id = next(item['yolo_id'] for item in classes if item['name'] == 'beer')
+    seen_samples = set()
+    expected_files = {split: set() for split in ('train', 'val')}
+    split_digests = {split: set() for split in ('train', 'val')}
+    split_phashes = {split: [] for split in ('train', 'val')}
+    source_counts = Counter()
+    class_counts = {split: Counter() for split in ('train', 'val')}
+    subset_paths = {'legacy_val': set(), 'targeted_val': set(), 'negative_val': set()}
+    composition_by_targeted_sample = {}
+    negative_counts = Counter()
+
+    for record in records:
+        required = {
+            'schema_version', 'sample_id', 'split', 'source',
+            'validation_subset', 'source_sample_id', 'image_path', 'label_path',
+            'image_sha256', 'label_sha256', 'negative', 'class_ids',
+            'class_names', 'scene_group_id',
+        }
+        if record.get('schema_version') != 1 or not required <= set(record):
+            raise ValueError('composition manifest contains an incomplete record')
+        sample_id = record['sample_id']
+        split = record['split']
+        source = record['source']
+        if sample_id in seen_samples:
+            raise ValueError(f'composed filename collision: {sample_id}')
+        seen_samples.add(sample_id)
+        if split not in ('train', 'val'):
+            raise ValueError(f'{sample_id}: invalid split')
+        expected_prefix = 'legacy_v1_' if source == 'legacy_v1_replay' else 'v2_targeted_'
+        if (
+            source not in ('legacy_v1_replay', 'v2_targeted')
+            or not sample_id.startswith(expected_prefix)
+        ):
+            raise ValueError(f'{sample_id}: invalid source or filename prefix')
+        image_path = root / record['image_path']
+        label_path = root / record['label_path']
+        if image_path != root / 'images' / split / f'{sample_id}.png':
+            raise ValueError(f'{sample_id}: image path is misplaced')
+        if label_path != root / 'labels' / split / f'{sample_id}.txt':
+            raise ValueError(f'{sample_id}: label path is misplaced')
+        if not image_path.is_file() or not label_path.is_file():
+            raise ValueError(f'{sample_id}: image or label is missing')
+        image_digest = sha256_file(image_path)
+        label_digest = sha256_file(label_path)
+        if image_digest != record['image_sha256'] or label_digest != record['label_sha256']:
+            raise ValueError(f'{sample_id}: content hash differs from composition manifest')
+        if image_digest in split_digests[split]:
+            raise ValueError(f'{split}: duplicate image content at {sample_id}')
+        split_digests[split].add(image_digest)
+        boxes = _read_boxes(label_path, valid_ids)
+        ids = [box['class_id'] for box in boxes]
+        if ids != record['class_ids']:
+            raise ValueError(f'{sample_id}: class IDs differ from label')
+        if [class_names[class_id] for class_id in ids] != record['class_names']:
+            raise ValueError(f'{sample_id}: class names differ from label')
+        if bool(record['negative']) != (not boxes):
+            raise ValueError(f'{sample_id}: negative declaration differs from label')
+        if source == 'legacy_v1_replay':
+            if record['negative'] or beer_id in ids or record['scene_group_id'] is not None:
+                raise ValueError(f'{sample_id}: invalid legacy replay content')
+            expected_subset = f'legacy_{split}'
+        else:
+            scenario = scenarios_by_sample.get(record['source_sample_id'])
+            if scenario is None:
+                raise ValueError(f'{sample_id}: targeted scenario evidence is missing')
+            if (
+                scenario['split'] != split
+                or scenario['scene_group_id'] != record['scene_group_id']
+            ):
+                raise ValueError(f'{sample_id}: targeted split/scene group differs')
+            if scenario['image_sha256'] != image_digest:
+                raise ValueError(f'{sample_id}: targeted scenario image hash differs')
+            manifest_boxes = [
+                {
+                    'class_id': item['class_id'], 'center_x': item['center_x'],
+                    'center_y': item['center_y'], 'width': item['width'],
+                    'height': item['height'],
+                }
+                for item in scenario['bboxes']
+            ]
+            if boxes != manifest_boxes or bool(scenario['negative']) != bool(record['negative']):
+                raise ValueError(f'{sample_id}: targeted scenario labels differ')
+            composition_by_targeted_sample[record['source_sample_id']] = record
+            expected_subset = f'negative_{split}' if record['negative'] else f'targeted_{split}'
+            if record['negative']:
+                negative_counts[split] += 1
+        if record['validation_subset'] != expected_subset:
+            raise ValueError(f'{sample_id}: validation subset is invalid')
+        if split == 'val':
+            subset_paths[expected_subset].add(record['image_path'])
+        source_counts[(source, split)] += 1
+        class_counts[split].update(ids)
+        expected_files[split].add(sample_id)
+        with Image.open(image_path) as image:
+            if image.size != (640, 480):
+                raise ValueError(f'{sample_id}: expected 640x480 image')
+            split_phashes[split].append((
+                sample_id,
+                _difference_hash(image),
+                tuple(ids),
+            ))
+
+    for split in ('train', 'val'):
+        actual_stems = {path.stem for path in (root / 'images' / split).glob('*.png')}
+        label_stems = {path.stem for path in (root / 'labels' / split).glob('*.txt')}
+        if actual_stems != expected_files[split] or label_stems != expected_files[split]:
+            raise ValueError(f'{split}: files differ from composition manifest')
+        if len(expected_files[split]) != expected_contract['final'][split]:
+            raise ValueError(f'{split}: final image count differs')
+        if source_counts[('legacy_v1_replay', split)] != expected_contract['clean_replay'][split]:
+            raise ValueError(f'{split}: clean replay count differs')
+        if source_counts[('v2_targeted', split)] != expected_contract['targeted'][split]:
+            raise ValueError(f'{split}: targeted count differs')
+        if negative_counts[split] != config['negative_samples'][split]:
+            raise ValueError(f'{split}: negative count differs')
+
+    if set(composition_by_targeted_sample) != set(scenarios_by_sample):
+        raise ValueError('not every targeted scenario is present exactly once')
+    if split_digests['train'] & split_digests['val']:
+        raise ValueError('composed train/val exact image leakage exists')
+    for train_id, train_hash, train_classes in split_phashes['train']:
+        for val_id, val_hash, val_classes in split_phashes['val']:
+            if (
+                train_classes == val_classes
+                and (train_hash ^ val_hash).bit_count() <= 1
+            ):
+                raise ValueError(
+                    'composed perceptual near-duplicate leakage: '
+                    f'{train_id} / {val_id}'
+                )
+
+    excluded = _load_jsonl(metadata / 'excluded_legacy_beer.jsonl')
+    excluded_counts = Counter(record.get('split') for record in excluded)
+    if dict(excluded_counts) != expected_contract['removed_legacy_beer_images']:
+        raise ValueError('excluded legacy beer evidence count differs')
+    for record in excluded:
+        if (
+            record.get('reason') != 'contains_legacy_beer'
+            or beer_id not in record.get('class_ids', [])
+        ):
+            raise ValueError('excluded V1 record lacks a beer label')
+
+    train_groups = {record['scene_group_id'] for record in scenarios if record['split'] == 'train'}
+    val_groups = {record['scene_group_id'] for record in scenarios if record['split'] == 'val'}
+    if train_groups & val_groups:
+        raise ValueError('targeted scene-group leakage exists in composed evidence')
+    profiles = {item['id']: item for item in config['lighting_profiles']}
+    primary_counts = {split: Counter() for split in ('train', 'val')}
+    quota_actual = {
+        split: {
+            name: {
+                'distance_band': Counter(), 'yaw_bin': Counter(),
+                'placement_category': Counter(), 'background_id': Counter(),
+                'lighting_profile': Counter(),
+            }
+            for name in config['class_policies']
+        }
+        for split in ('train', 'val')
+    }
+    beer_dark = []
+    split_lighting = {'train': set(), 'val': set()}
+    for scenario in scenarios:
+        split = scenario['split']
+        split_lighting[split].add((
+            scenario['background']['id'],
+            _validate_lighting(scenario['sample_id'], scenario['lighting'], profiles),
+        ))
+        if scenario['negative']:
+            continue
+        primary = scenario['primary']
+        name = primary['class_name']
+        primary_counts[split][name] += 1
+        actual = quota_actual[split][name]
+        actual['distance_band'][scenario['camera']['distance_band']] += 1
+        actual['yaw_bin'][_normalized_yaw_key(primary['yaw_bin_deg'])] += 1
+        actual['placement_category'][scenario['placement_category']] += 1
+        actual['background_id'][scenario['background']['id']] += 1
+        actual['lighting_profile'][scenario['lighting']['profile_id']] += 1
+        if name == 'beer':
+            composed = composition_by_targeted_sample[scenario['sample_id']]
+            box = next(item for item in scenario['bboxes'] if item['class_id'] == beer_id)
+            with Image.open(root / composed['image_path']) as image:
+                beer_dark.append(_near_black_fraction(
+                    image, box, int(config['beer_visual_check']['near_black_channel_threshold'])
+                ))
+    if split_lighting['train'] & split_lighting['val']:
+        raise ValueError('targeted background/lighting leakage exists in composed evidence')
+    for split in ('train', 'val'):
+        for name, policy in config['class_policies'].items():
+            if primary_counts[split][name] != policy['samples'][split]:
+                raise ValueError(f'{split}/{name}: targeted primary count differs')
+            for field, expected in policy_expected_counts(config, name, split).items():
+                if quota_actual[split][name][field] != expected:
+                    raise ValueError(f'{split}/{name}: targeted {field} quota differs')
+    max_dark = float(config['beer_visual_check']['max_near_black_fraction'])
+    violations = sum(value > max_dark for value in beer_dark)
+    if violations:
+        raise ValueError(f'composed beer black-fraction violations={violations}')
+
+    for subset, expected in subset_paths.items():
+        path = metadata / 'validation_subsets' / f'{subset}.txt'
+        actual = set(path.read_text(encoding='utf-8').splitlines())
+        if actual != expected:
+            raise ValueError(f'validation subset list differs: {subset}')
+
+    recorded_counts = summary.get('actual', {}).get('class_instances')
+    actual_counts = {
+        split: {
+            class_names[class_id]: class_counts[split][class_id]
+            for class_id in sorted(valid_ids)
+        }
+        for split in ('train', 'val')
+    }
+    if recorded_counts != actual_counts:
+        raise ValueError('recorded final class counts differ')
+    print('VALID COMPOSED V2: train=2219 val=481 total=2700')
+    print('VALID sources: legacy_v1_replay=1976 v2_targeted=724 removed_old_beer=184')
+    print('VALID negatives: train=30 val=10 old_beer_replay=0 filename_collision=0')
+    print('VALID leakage: exact_image=0 perceptual_near_duplicate=0 targeted_scene_group=0')
+    print(
+        f'VALID corrected beer: samples={len(beer_dark)} violations=0 '
+        f'near_black_max={max(beer_dark):.4f} '
+        f'near_black_median={sorted(beer_dark)[len(beer_dark) // 2]:.4f}'
+    )
+    for split in ('train', 'val'):
+        print(f'VALID {split} class instances: {actual_counts[split]}')
 
 
 def main() -> int:
@@ -461,6 +787,10 @@ def main() -> int:
     actual_yaml = (root / 'data.yaml').read_text(encoding='utf-8')
     if actual_yaml != expected_data_yaml(root, classes):
         raise ValueError('data.yaml does not exactly match the class manifest')
+
+    if (root / 'dataset_composition_manifest.jsonl').is_file():
+        validate_composed_v2_dataset(root, classes)
+        return 0
 
     if (root / 'scenario_manifest.jsonl').is_file():
         validate_v2_dataset(root, classes)

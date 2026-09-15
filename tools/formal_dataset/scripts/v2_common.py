@@ -200,12 +200,23 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
         raise V2ConfigError("backgrounds must contain at least two variants")
     background_ids = set()
     for index, background in enumerate(backgrounds):
-        background = _object(background, ("id", "world_origin_xy_m", "weight"), f"backgrounds[{index}]")
+        background = _object(
+            background,
+            ("id", "world_origin_xy_m", "weight"),
+            f"backgrounds[{index}]",
+        )
         background_id = background["id"]
-        if not isinstance(background_id, str) or not background_id or background_id in background_ids:
+        if (
+            not isinstance(background_id, str)
+            or not background_id
+            or background_id in background_ids
+        ):
             raise V2ConfigError(f"invalid or duplicate background id: {background_id}")
         background_ids.add(background_id)
-        if not isinstance(background["world_origin_xy_m"], list) or len(background["world_origin_xy_m"]) != 2:
+        if (
+            not isinstance(background["world_origin_xy_m"], list)
+            or len(background["world_origin_xy_m"]) != 2
+        ):
             raise V2ConfigError(f"backgrounds[{index}].world_origin_xy_m is invalid")
         for component in background["world_origin_xy_m"]:
             _number(component, f"backgrounds[{index}].world_origin_xy_m")
@@ -216,12 +227,17 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
         ("table_size_xy_m", "object_inset_m", "center_fraction", "edge_band_m"),
         "placement",
     )
-    if not isinstance(placement["table_size_xy_m"], list) or len(placement["table_size_xy_m"]) != 2:
+    if (
+        not isinstance(placement["table_size_xy_m"], list)
+        or len(placement["table_size_xy_m"]) != 2
+    ):
         raise V2ConfigError("placement.table_size_xy_m is invalid")
     for value in placement["table_size_xy_m"]:
         _number(value, "placement.table_size_xy_m", minimum=0.1)
     _number(placement["object_inset_m"], "placement.object_inset_m", minimum=0.01)
-    center_fraction = _number(placement["center_fraction"], "placement.center_fraction", minimum=0.01)
+    center_fraction = _number(
+        placement["center_fraction"], "placement.center_fraction", minimum=0.01
+    )
     if center_fraction >= 1.0:
         raise V2ConfigError("placement.center_fraction must be < 1")
     _number(placement["edge_band_m"], "placement.edge_band_m", minimum=0.0)
@@ -250,7 +266,11 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
                 raise V2ConfigError(f"lighting_profiles[{index}].{field} is invalid")
             for component in value:
                 _number(component, f"lighting_profiles[{index}].{field}")
-        _range(profile["main_intensity"], f"lighting_profiles[{index}].main_intensity", minimum=0.0)
+        _range(
+            profile["main_intensity"],
+            f"lighting_profiles[{index}].main_intensity",
+            minimum=0.0,
+        )
         _range(
             profile["ambient_fill_intensity"],
             f"lighting_profiles[{index}].ambient_fill_intensity",
@@ -261,7 +281,11 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
     if not isinstance(split_policy, dict) or set(split_policy) != set(SPLITS):
         raise V2ConfigError("split_policy must define train and val")
     for split in SPLITS:
-        policy = _object(split_policy[split], ("yaw_offset_deg", "seed_offset"), f"split_policy.{split}")
+        policy = _object(
+            split_policy[split],
+            ("yaw_offset_deg", "seed_offset"),
+            f"split_policy.{split}",
+        )
         _number(policy["yaw_offset_deg"], f"split_policy.{split}.yaw_offset_deg")
         _integer(policy["seed_offset"], f"split_policy.{split}.seed_offset")
 
@@ -291,7 +315,11 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
             raise V2ConfigError(f"class_policies.{name}.samples must define train and val")
         for split in SPLITS:
             _integer(policy["samples"][split], f"class_policies.{name}.samples.{split}")
-        validate_weights(policy["distance_weights"], set(bands), f"class_policies.{name}.distance_weights")
+        validate_weights(
+            policy["distance_weights"],
+            set(bands),
+            f"class_policies.{name}.distance_weights",
+        )
         yaw_weights = validate_weights(
             policy["yaw_weights"],
             {str(value) for value in range(0, 360)},
@@ -302,9 +330,21 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
             if not 0.0 <= yaw < 360.0:
                 raise V2ConfigError(f"class_policies.{name} yaw must be in [0, 360)")
         _number(policy["yaw_jitter_deg"], f"class_policies.{name}.yaw_jitter_deg", minimum=0.0)
-        validate_weights(policy["placement_weights"], set(PLACEMENTS), f"class_policies.{name}.placement_weights")
-        validate_weights(policy["background_weights"], background_ids, f"class_policies.{name}.background_weights")
-        validate_weights(policy["lighting_weights"], profile_ids, f"class_policies.{name}.lighting_weights")
+        validate_weights(
+            policy["placement_weights"],
+            set(PLACEMENTS),
+            f"class_policies.{name}.placement_weights",
+        )
+        validate_weights(
+            policy["background_weights"],
+            background_ids,
+            f"class_policies.{name}.background_weights",
+        )
+        validate_weights(
+            policy["lighting_weights"],
+            profile_ids,
+            f"class_policies.{name}.lighting_weights",
+        )
         secondary = _number(
             policy["secondary_object_probability"],
             f"class_policies.{name}.secondary_object_probability",
@@ -318,10 +358,17 @@ def load_v2_config(path: Path, class_names: Sequence[str]) -> dict[str, Any]:
         ("near_black_channel_threshold", "max_near_black_fraction"),
         "beer_visual_check",
     )
-    threshold = _integer(visual["near_black_channel_threshold"], "beer_visual_check.near_black_channel_threshold")
+    threshold = _integer(
+        visual["near_black_channel_threshold"],
+        "beer_visual_check.near_black_channel_threshold",
+    )
     if threshold > 255:
         raise V2ConfigError("beer_visual_check.near_black_channel_threshold must be <= 255")
-    fraction = _number(visual["max_near_black_fraction"], "beer_visual_check.max_near_black_fraction", minimum=0.0)
+    fraction = _number(
+        visual["max_near_black_fraction"],
+        "beer_visual_check.max_near_black_fraction",
+        minimum=0.0,
+    )
     if fraction > 1.0:
         raise V2ConfigError("beer_visual_check.max_near_black_fraction must be <= 1")
     return deepcopy(dict(document))
@@ -397,7 +444,11 @@ def _sample_placement(
     if category == "center":
         local = [central(half_x), central(half_y)]
     elif category == "edge":
-        local = [boundary(half_x), central(half_y)] if rng.random() < 0.5 else [central(half_x), boundary(half_y)]
+        local = (
+            [boundary(half_x), central(half_y)]
+            if rng.random() < 0.5
+            else [central(half_x), boundary(half_y)]
+        )
     elif category == "corner":
         local = [boundary(half_x), boundary(half_y)]
     else:
@@ -419,6 +470,32 @@ def _sample_lighting(profile: Mapping[str, Any], rng: random.Random) -> dict[str
         "ambient_fill_rgb": [float(value) for value in profile["ambient_fill_rgb"]],
         "ambient_fill_intensity": rng.uniform(*profile["ambient_fill_intensity"]),
     }
+
+
+def secondary_preserves_primary_visibility(
+    camera_xy: Sequence[float],
+    primary_xy: Sequence[float],
+    secondary_xy: Sequence[float],
+    clearance_m: float,
+) -> bool:
+    """Reject a secondary in the primary's conservative camera sight corridor."""
+    view_x = float(primary_xy[0]) - float(camera_xy[0])
+    view_y = float(primary_xy[1]) - float(camera_xy[1])
+    view_length_sq = view_x * view_x + view_y * view_y
+    if view_length_sq <= 0.0:
+        raise V2ConfigError("camera and primary positions coincide")
+    offset_x = float(secondary_xy[0]) - float(camera_xy[0])
+    offset_y = float(secondary_xy[1]) - float(camera_xy[1])
+    along = (offset_x * view_x + offset_y * view_y) / view_length_sq
+    if not 0.0 < along < 1.0:
+        return True
+    closest_x = float(camera_xy[0]) + along * view_x
+    closest_y = float(camera_xy[1]) + along * view_y
+    distance = math.hypot(
+        float(secondary_xy[0]) - closest_x,
+        float(secondary_xy[1]) - closest_y,
+    )
+    return distance >= float(clearance_m)
 
 
 def build_scenario_plan(
@@ -460,22 +537,40 @@ def build_scenario_plan(
                 yaw_deg = (
                     yaw_bin
                     + float(config["split_policy"][split]["yaw_offset_deg"])
-                    + sample_rng.uniform(-float(policy["yaw_jitter_deg"]), float(policy["yaw_jitter_deg"]))
+                    + sample_rng.uniform(
+                        -float(policy["yaw_jitter_deg"]),
+                        float(policy["yaw_jitter_deg"]),
+                    )
                 ) % 360.0
-                bearing = math.radians(sample_rng.uniform(*config["world"]["camera_bearing_deg"]))
+                bearing = math.radians(sample_rng.uniform(
+                    *config["world"]["camera_bearing_deg"]
+                ))
                 camera_x = world_xy[0] - distance * math.cos(bearing)
                 camera_y = world_xy[1] - distance * math.sin(bearing)
                 camera_z = sample_rng.uniform(*config["world"]["camera_height_m"])
                 horizontal = math.hypot(world_xy[0] - camera_x, world_xy[1] - camera_y)
                 camera_yaw = math.atan2(world_xy[1] - camera_y, world_xy[0] - camera_x)
-                camera_yaw += math.radians(sample_rng.uniform(*config["world"]["camera_yaw_jitter_deg"]))
-                camera_pitch = math.atan2(camera_z - float(config["world"]["target_z_m"]), horizontal)
-                camera_pitch += math.radians(sample_rng.uniform(*config["world"]["camera_pitch_jitter_deg"]))
+                camera_yaw += math.radians(sample_rng.uniform(
+                    *config["world"]["camera_yaw_jitter_deg"]
+                ))
+                camera_pitch = math.atan2(
+                    camera_z - float(config["world"]["target_z_m"]),
+                    horizontal,
+                )
+                camera_pitch += math.radians(sample_rng.uniform(
+                    *config["world"]["camera_pitch_jitter_deg"]
+                ))
                 profile = profiles[fields["lighting_profile"][index]]
                 lighting = _sample_lighting(profile, sample_rng)
                 secondary = None
                 if sample_rng.random() < float(policy["secondary_object_probability"]):
-                    secondary_name = sample_rng.choice([name for name in names if name != class_name])
+                    secondary_name = sample_rng.choice([
+                        name for name in names if name != class_name
+                    ])
+                    visibility_clearance = max(
+                        0.18,
+                        float(config["world"]["minimum_object_spacing_m"]),
+                    )
                     for _ in range(100):
                         secondary_local, secondary_world = _sample_placement(
                             sample_rng.choice(PLACEMENTS),
@@ -483,16 +578,33 @@ def build_scenario_plan(
                             config["placement"],
                             sample_rng,
                         )
-                        if math.hypot(secondary_world[0] - world_xy[0], secondary_world[1] - world_xy[1]) >= float(config["world"]["minimum_object_spacing_m"]):
+                        if (
+                            math.hypot(
+                                secondary_world[0] - world_xy[0],
+                                secondary_world[1] - world_xy[1],
+                            ) >= float(config["world"]["minimum_object_spacing_m"])
+                            and secondary_preserves_primary_visibility(
+                                (camera_x, camera_y),
+                                world_xy,
+                                secondary_world,
+                                visibility_clearance,
+                            )
+                        ):
                             break
                     else:
                         raise V2ConfigError("could not place a non-overlapping secondary object")
                     secondary = {
                         "class_id": class_ids[secondary_name],
                         "class_name": secondary_name,
-                        "asset_tree_sha256": asset_manifest["classes"][secondary_name]["tree_sha256"],
+                        "asset_tree_sha256": asset_manifest["classes"][
+                            secondary_name
+                        ]["tree_sha256"],
                         "position_local_m": secondary_local,
-                        "position_world_m": [secondary_world[0], secondary_world[1], float(config["world"]["table_top_z_m"])],
+                        "position_world_m": [
+                            secondary_world[0],
+                            secondary_world[1],
+                            float(config["world"]["table_top_z_m"]),
+                        ],
                         "yaw_deg": sample_rng.uniform(0.0, 360.0),
                     }
                 split_records.append({
@@ -507,9 +619,15 @@ def build_scenario_plan(
                     "primary": {
                         "class_id": class_ids[class_name],
                         "class_name": class_name,
-                        "asset_tree_sha256": asset_manifest["classes"][class_name]["tree_sha256"],
+                        "asset_tree_sha256": asset_manifest["classes"][
+                            class_name
+                        ]["tree_sha256"],
                         "position_local_m": local_xy,
-                        "position_world_m": [world_xy[0], world_xy[1], float(config["world"]["table_top_z_m"])],
+                        "position_world_m": [
+                            world_xy[0],
+                            world_xy[1],
+                            float(config["world"]["table_top_z_m"]),
+                        ],
                         "yaw_bin_deg": yaw_bin,
                         "yaw_deg": yaw_deg,
                     },
@@ -531,8 +649,14 @@ def build_scenario_plan(
                 })
 
         negative_count = int(config["negative_samples"][split])
-        background_weights = {item["id"]: float(item["weight"]) for item in config["backgrounds"]}
-        lighting_weights = {item["id"]: float(item["weight"]) for item in config["lighting_profiles"]}
+        background_weights = {
+            item["id"]: float(item["weight"])
+            for item in config["backgrounds"]
+        }
+        lighting_weights = {
+            item["id"]: float(item["weight"])
+            for item in config["lighting_profiles"]
+        }
         negative_backgrounds = quota_sequence(negative_count, background_weights, rng)
         negative_lights = quota_sequence(negative_count, lighting_weights, rng)
         for index in range(negative_count):
@@ -540,8 +664,11 @@ def build_scenario_plan(
             sample_rng = random.Random(sample_seed)
             background = backgrounds[negative_backgrounds[index]]
             origin = background["world_origin_xy_m"]
-            distance = sample_rng.uniform(*config["distance_bands_m"][sample_rng.choice(("mid", "far"))])
-            bearing = math.radians(sample_rng.uniform(*config["world"]["camera_bearing_deg"]))
+            distance_band = sample_rng.choice(("mid", "far"))
+            distance = sample_rng.uniform(*config["distance_bands_m"][distance_band])
+            bearing = math.radians(sample_rng.uniform(
+                *config["world"]["camera_bearing_deg"]
+            ))
             camera_z = sample_rng.uniform(*config["world"]["camera_height_m"])
             camera_x = float(origin[0]) - distance * math.cos(bearing)
             camera_y = float(origin[1]) - distance * math.sin(bearing)
@@ -582,7 +709,9 @@ def build_scenario_plan(
     return records
 
 
-def policy_expected_counts(config: Mapping[str, Any], class_name: str, split: str) -> dict[str, Counter]:
+def policy_expected_counts(
+    config: Mapping[str, Any], class_name: str, split: str
+) -> dict[str, Counter]:
     policy = config["class_policies"][class_name]
     total = int(policy["samples"][split])
     return {
