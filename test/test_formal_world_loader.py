@@ -58,6 +58,22 @@ class TestFormalWorldLoader(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'must end in .world'):
                 navigation._resolve_world_file(temporary.name)
 
+    def test_competition_world_uses_managed_server_only(self):
+        self.assertEqual(
+            navigation._gazebo_command(Path('/tmp/formal.world')),
+            [
+                'ign',
+                'gazebo',
+                '-r',
+                '-s',
+                '-v',
+                '2',
+                '/tmp/formal.world',
+                '--force-version',
+                '6',
+            ],
+        )
+
     def test_world_name_is_validated_by_service_helpers(self):
         self.assertEqual(
             world_wait.parse_arguments(['--world-name', 'robocup_home']).world_name,
