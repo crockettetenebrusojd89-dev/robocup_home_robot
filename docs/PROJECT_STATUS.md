@@ -6,17 +6,24 @@
 
 ## Current Stage
 
-Event-week runtime containment for the 70-point autonomous navigation and
-visual counting task. Target whitelist filtering is now applied before depth
-and tracking. Tiled inference, low-confidence banana candidates, and one fixed
-close-range fallback were measured and rejected. Epoch31 is the frozen
-competition checkpoint even though the banana robustness problem remains open.
+The formal P1/P2 Final Scoring Gate is complete for the 70-point autonomous
+navigation and visual counting task. Nine of nine legal tabletop trials
+completed navigation, P1/P2 scanning, tracking, one fused answer save, and
+official 10 cm scoring. Across 28 GT, the result was 13 TP, 7 FP, and 15 FN;
+the nine visual scores totaled 112/270 and averaged 12.44/30. Normal
+combinations averaged 12.67/30 and dangerous combinations averaged 18/30.
+With the navigation 40 points included, the measured nine-run center is about
+52/70. This is a record of the tested scenarios, not a competition forecast.
 
 ## Current Goal
 
-Stop visual model development and preserve the measured detector limitations.
-Proceed next to the formal `/map` 10 cm, final-FP, and `answer.json` gate using
-epoch31, confidence 0.50, unchanged P1/P2, and the early target whitelist.
+The documented formal baseline is V2 epoch31 (`epoch30.pt`), confidence 0.50,
+early target whitelisting, P1 `(-3.485, -1.115, -0.532)`, P2
+`(0.265, -0.665, -2.638)`, 5 cm online association, 8 cm final deduplication,
+five final confirmations, and the existing position estimator. Detector and
+banana development is stopped. No audited low-confidence, tracking, dedup,
+confirmation, viewpoint, or position-estimator change has replaced this
+baseline.
 
 ## Open Problems
 
@@ -36,11 +43,23 @@ epoch31, confidence 0.50, unchanged P1/P2, and the early target whitelist.
   `docs/FORMAL_MODEL_V2_1_REPAIR_2026-09-16.md`. The final runtime audit found
   tiled inference 1/15, low-confidence replay at most 1/15 after five distinct
   saved frames, and P1/P2 plus a close fallback only 4/15. Full evidence is in
-  `docs/BANANA_RUNTIME_REPAIR_2026-09-16.md`.
-- **Next step:** Treat epoch31 as the frozen event checkpoint and P-001 as an
-  accepted HIGH competition risk, not a solved detector. Do not train, sweep,
-  tile, lower confidence, or add the rejected fallback. Record banana and
-  requested-pair confusion failures during the next end-to-end gate.
+  `docs/BANANA_RUNTIME_REPAIR_2026-09-16.md`. The final geometry-discriminating
+  pose `(-2.085, -2.415, -2.691)` passed one Nav2 reachability/scan smoke, but
+  epoch31 detected banana in 0/15 untouched placements and 0/9 difficult
+  placements. P1/new/P2 therefore remained 2/15 and 0/9 while adding four
+  wrong-class boxes on three placements. The prescribed stop rule is met. In
+  the full Final Scoring Gate, banana then produced 0 TP, 0 FP, and 3 FN across
+  three legal layouts, losing all 10 banana points every time. The subsequent
+  low-confidence audit classified 4/11 detector FN as strong sub-threshold,
+  1/11 as weak, and 6/11 as absent/non-actionable. In a depth-enabled replay,
+  banana at confidence 0.10 or 0.15 produced 1 TP plus 3 FP; master produced
+  only a spatially wrong FP and bowl remained outside 10 cm. V2.1, image size
+  960, tiled inference, low-confidence/tabletop rescue, the old fallback
+  viewpoint, and the new geometry viewpoint were all tested and rejected. Full
+  evidence is in `docs/LOW_CONFIDENCE_DETECTOR_FN_AUDIT_2026-09-16.md`.
+- **Recorded disposition:** P-001 remains an accepted HIGH competition risk.
+  Formal confidence remains 0.50; no low-confidence rescue, tabletop ROI
+  rescue, global threshold lowering, or extra banana viewpoint is enabled.
 
 ### P-002 — Competition-like full-chain reliability is not established
 
@@ -48,13 +67,18 @@ epoch31, confidence 0.50, unchanged P1/P2, and the early target whitelist.
 - **Priority:** HIGH
 - **Problem:** Ten different randomized layouts with temporary obstacles,
   occlusion, and the eight-minute cap have not been completed.
-- **Key evidence:** After the startup correction, the fixed-seed gate achieved
-  Gazebo/Nav2 startup 5/5 but complete-task success 4/5; scores were 50, 50,
-  50, 0, and 48 out of 70. Existing broader evidence covers only one seed.
-- **Next step:** With detector development frozen for the event, first run the
-  formal `/map` 10 cm, final-FP, and `answer.json` gate. Then run only the
-  highest-value different-seed full-chain trials remaining before competition,
-  classifying failures by stage and retaining P-001 as known detector risk.
+- **Key evidence:** The Final Scoring Gate completed the full runner and scorer
+  in 9/9 legal tabletop trials, but only 13/28 GT became TP; totals were 7 FP
+  and 15 FN. Normal combinations scored 8, 20, and 10/30; dangerous
+  combinations 18, 16, and 20/30; banana combinations 10, 10, and 0/30.
+  The visual total was 112/270, or 12.44/30 on average. Thirteen TPs had
+  0.58 cm minimum, 6.08 cm median, and 8.98 cm maximum error; three were over
+  8 cm and none was at or above 10 cm. Three additional correct-class outputs
+  failed at 10.37, 11.11, and 11.90 cm, each producing FP+FN. Full evidence is
+  in `docs/FINAL_SCORING_GATE_2026-09-16.md`.
+- **Recorded disposition:** The full runner has 9/9 successful end-to-end
+  executions in this gate. This does not close P-002 because the broader
+  randomized-layout requirement remains unverified.
 
 ### P-003 — Judge target-name input contract is unknown
 
@@ -68,19 +92,34 @@ epoch31, confidence 0.50, unchanged P1/P2, and the early target whitelist.
 - **Next step:** Obtain the official input contract or a representative judge
   input sample, then validate normalization and add only confirmed aliases.
 
+### P-004 — Final tracking fragmentation causes scorer FP and FN
+
+- **Status:** OPEN
+- **Priority:** HIGH
+- **Problem:** Viewpoint-dependent localized points can form multiple tracks
+  for one real object or remain below final confirmation instead of producing
+  one stable output.
+- **Key evidence:** The Final Scoring Gate produced four duplicate FPs: apple
+  split into two outputs 10.80 cm apart, tomato into two outputs 14.86 cm
+  apart, and coke into three outputs 11.48--25.17 cm apart. The offline audit
+  found scan-angle position drift within P1 as well as P1/P2 mode changes.
+  The four duplicate FP were apple 1, tomato 1, and coke 2. Of 15 FN, 11 were
+  detector-evidence failures, zero were caused by depth/TF, one was primarily
+  tracking/confirmation, three were localization failures at or beyond 10 cm,
+  and zero were lost only by final filtering/dedup. Tracking is therefore not
+  the main FN source. Final confirmation 4 was identical to 5, while 3 added
+  two FP and reduced the nine-run score sum from 112 to 108. A 7/8/10 cm
+  global online radius did not remove the four duplicate FP in final-centroid
+  sensitivity and incorrectly merged 10--12 cm same-class objects under 2 cm
+  localization jitter. The raw runs did not retain ordered 3D observations,
+  so frame-exact online replay is not possible from the current corpus. Full
+  evidence is in
+  `docs/TRACKING_FRAGMENTATION_OFFLINE_AUDIT_2026-09-16.md`.
+- **Recorded disposition:** There is no validated safe tracking-parameter or
+  position-estimator change. Online association remains 5 cm, final dedup 8 cm,
+  final confirmations 5, and the position estimator remains unchanged.
+
 ## Deferred Problems
-
-### P-004 — Close same-class final deduplication needs competition calibration
-
-- **Status:** DEFERRED
-- **Priority:** MEDIUM
-- **Problem:** Same-frame protection for two real same-class objects closer
-  than 8 cm and the 8 cm final-deduplication radius are not runtime-calibrated
-  against official layouts.
-- **Key evidence:** Deterministic tests and one real split-cluster merge passed,
-  but no close-pair Gazebo ground-truth trial has established TP/FP behavior.
-- **Next step:** After P-001 and the main randomized gate, run controlled
-  close-pair layouts and score them at the official 10 cm position threshold.
 
 ### P-005 — Corner-frame calibration is unverified
 
@@ -161,8 +200,8 @@ epoch31, confidence 0.50, unchanged P1/P2, and the early target whitelist.
 
 ## Next Step
 
-Stop this completed detector/runtime repair work. P-001 remains OPEN but model
-selection is frozen on epoch31 for competition; P-002 is now OPEN rather than
-blocked. In the next task, run the formal `/map` 10 cm, final-FP, and
-`answer.json` gate with the early whitelist. Do not continue automatically into
-the full competition runner, additional model work, FR3, or MoveIt/MTC.
+This documentation synchronization establishes no new project action. The
+current recorded state is the frozen epoch31/P1/P2 baseline above, with
+low-confidence rescue, banana alternatives, and the audited tracking parameter
+changes rejected. No safe runtime parameter modification is currently
+validated.

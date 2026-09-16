@@ -424,3 +424,285 @@ early whitelist. Do not continue automatically into the full runner or FR3.
   fallback capture had zero render-resource errors; and one Nav2 fallback trial
   completed successfully. Full evidence is in
   `docs/BANANA_RUNTIME_REPAIR_2026-09-16.md`.
+
+## 2026-09-16 — Final banana geometry viewpoint gate
+
+### Goal
+
+Test exactly one fixed distance-plus-angle candidate at
+`(-2.085, -2.415, -2.691)`: require a real Nav2 safety smoke before replaying
+the untouched 15-placement banana external gate, then obey the declared recall
+stop rule without searching another viewpoint.
+
+### Done
+
+- Ran one unchanged-map/footprint Nav2 navigation and 12-step scan smoke.
+- Reused the original 15 banana positions and fixed yaw with epoch31 and
+  confidence 0.50. Invalid missing-resource capture evidence was rejected;
+  the accepted recapture had zero missing-resource signatures.
+- Compared candidate-only detections with the frozen P1/P2 baseline and kept
+  all detector, navigation, localization, tracking, and dedup settings frozen.
+
+### Results
+
+- Nav2 planned and reached the candidate without collision, recovery, or
+  oscillation in 23.00 s. The accepted goal pose error was 0.323 m and 18.7
+  degrees; the observed endpoint retained about 0.53 m map clearance. The scan
+  completed in 44.46 s.
+- Candidate-only banana recall was 0/15 and 0/9 difficult placements. P1/new/P2
+  remained 2/15 and 0/9, below both the old fallback's 4/15 and the mandatory
+  stop threshold. The candidate also produced four wrong-class boxes on three
+  placements: three beer and one pudding_box.
+- Although nominal distance and relative viewing angle improved, the banana
+  remained only about 4.6--7.6 pixels on its short side when a diagnostic
+  candidate existed, and some views were partially blocked by room furniture.
+  The pose does not justify its estimated roughly 53-second route-plus-scan
+  cost.
+
+### Problem Updates
+
+- P-001 remains **OPEN** and is now an accepted competition risk with banana
+  viewpoint development permanently stopped under the declared rule.
+- P-002 remains **OPEN**. The next justified work is the formal `/map` 10 cm,
+  final-FP, and `answer.json` gate.
+
+### Next
+
+Keep epoch31, confidence 0.50, and P1/P2 unchanged. Do not add the candidate or
+test another viewpoint. Proceed to the Final Scoring Gate.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting HEAD `be55183b`.
+- No runtime/code change and no commit. Checkpoint SHA256 remained
+  `c16f5332...9564c`; one Nav2 smoke and one accepted 360-frame external
+  capture completed. Evidence is under
+  `~/robocup_assets/p2_eval/banana_geometry_candidate_nav_smoke_20260916` and
+  `~/robocup_assets/p2_eval/v2_epoch31_banana_geometry_candidate_valid_20260916`.
+
+## 2026-09-16 — Final P1/P2 official-scorer gate
+
+### Goal
+
+Measure the frozen epoch31 P1/P2 chain at the actual `answer.json` and strict
+10 cm scorer boundary, including normal, dangerous requested-pair, and banana
+combinations. Distinguish raw detections from final TP/FP/FN.
+
+### Done
+
+- Audited early whitelisting, reset ownership, confirmation/dedup settings,
+  three-key answer writing, and the scorer's one-to-one `<0.10 m` contract.
+- Found that the installed localizer predated the committed early whitelist;
+  rebuilt only `robocup_home_robot` and verified the runtime/source hashes
+  match before testing.
+- Added nine reproducible legal tabletop scenarios and ran the unchanged full
+  P1/scan/P2/scan/save/scorer chain once for every scenario.
+- Preserved runtime telemetry, answers, GT, scorer details, raw captures, and
+  offline detector evidence under
+  `~/robocup_assets/p2_eval/final_scoring_gate_20260916`.
+
+### Results
+
+- Full runner/scorer completion was 9/9, but vision totaled 13 TP, 7 FP, and
+  15 FN over 28 GT. Normal combinations scored 8/20/10, dangerous combinations
+  18/16/20, and banana combinations 10/10/0 out of 30.
+- Banana was 0 TP, 0 FP, 3 FN and lost all 10 class points in every layout.
+  No tested dangerous pair produced a final cross-class FP near the other
+  class GT; the observed extra outputs were same-object tracking splits.
+- Four duplicate FPs affected apple, tomato, and coke. Three other
+  correct-class outputs failed the position gate at 10.37--11.90 cm. The 13
+  TPs had 0.58 cm minimum, 6.08 cm median, and 8.98 cm maximum error.
+- Seven FN class instances had zero detections, five had detections/depth/TF
+  but no five-observation final track, and three produced an output outside
+  10 cm. Full evidence and verdict are in
+  `docs/FINAL_SCORING_GATE_2026-09-16.md`.
+
+### Problem Updates
+
+- P-001 remains **OPEN** and frozen as accepted detector risk; the final gate
+  measured banana's practical loss without reopening model work.
+- P-002 remains **OPEN**: operational completion is established, but the
+  0--20/30 score range rejects competition-readiness.
+- P-004 changes from **DEFERRED** to **OPEN/HIGH** because tracking splits
+  caused four scorer FPs and low-evidence fragmentation contributed to final
+  FN. No radius or confirmation threshold changed.
+
+### Next
+
+Keep detector, confidence, P1/P2, navigation, TF, and RGB-D geometry frozen.
+Address only P-004 with one controlled tracking-fragmentation and close-pair
+safety A/B, then rerun the same official-scorer gate. Do not start broad
+randomized readiness repeats or FR3 work yet.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting HEAD `be55183b`.
+- Validation: 14 formal-runtime, 9 dedup, and 20 P2 tests passed; installed and
+  source localizer SHA256 matched after rebuild; 9/9 Gazebo/ROS2/scorer trials
+  completed successfully. Existing user edits in `README.md`, `AGENTS.md`,
+  `docs/HANDOFF.md`, `docs/PROJECT_STATE.md`, `docs/PROJECT_STATUS.md`, and
+  `docs/WORKLOG.md` were preserved and excluded from staging.
+
+## 2026-09-16 — P-004 tracking-fragmentation offline audit
+
+### Goal
+
+Use only the saved Final Scoring Gate evidence to decompose all 15 FN, audit
+the four duplicate FP, test association and final-confirmation sensitivity,
+protect close same-class objects, and check simple position estimators before
+changing runtime parameters.
+
+### Done
+
+- Classified every FN from runtime telemetry, final tracks, answers, GT, and
+  official scorer details.
+- Reconstructed the observable duplicate-track history from final telemetry
+  and periodic track snapshots, and distinguished P1-internal scan drift from
+  P1/P2 mode changes.
+- Ran final-track-centroid sensitivity at 5/7/8/10 cm, exact final-confirmation
+  rescoring at 5/4/3, a deterministic 10--20 cm close-pair safety case, and a
+  bounded estimator audit from post-reset logged map samples.
+- Audited evidence completeness before replay. No detector, Gazebo, navigation,
+  training, formal parameter, or runtime code change was made.
+
+### Results
+
+- Of 15 FN, 11 (73.3%) lacked sufficient correct detector evidence, one (6.7%)
+  had four correct observations split 2+2 below confirmation, and three (20%)
+  had outputs outside 10 cm. Depth/TF caused no GT miss.
+- Apple split within P1 before P2, tomato split across P1/P2, and coke split
+  both within P1 and again at P2. The common mechanism is scan-angle/viewpoint
+  position drift, not confidence or TF failure.
+- Final confirmation 4 was identical to 5. Threshold 3 added two scorer FP and
+  reduced the aggregate score from 112 to 108/270.
+- The 7/8/10 cm centroid sensitivity did not remove the four duplicate FP. A
+  10 cm radius showed one unsupported boundary-localization gain, but 7/8/10
+  cm incorrectly merged 10--12 cm same-class objects under 2 cm jitter.
+- The corpus lacks ordered per-observation map positions and association
+  decisions, so a frame-exact online-radius replay and full estimator A/B
+  cannot be honestly computed. Full results are in
+  `docs/TRACKING_FRAGMENTATION_OFFLINE_AUDIT_2026-09-16.md`.
+
+### Problem Updates
+
+- P-004 remains **OPEN/HIGH**. Its duplicate mechanism is confirmed, but the
+  requested global-radius and confirmation changes are rejected by score and
+  close-pair safety evidence.
+- P-001 and P-002 remain **OPEN**. The FN decomposition shows detector recall
+  and localization margin dominate recoverable score more than final
+  confirmation tuning.
+
+### Next
+
+Keep online association 5 cm, final confirmations 5, and final dedup 8 cm.
+Before another A/B, add bounded observational-only retention and deterministic
+ordered replay, then collect an unchanged replayable corpus. Do not rerun the
+nine Gazebo scenarios until a safe candidate exists.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; HEAD `1b90b24`; remote divergence 0/0
+  after fetch.
+- Validation used all nine telemetry/GT/answer/scorer bundles, exact scorer
+  recomputation for final-confirmation 5/4/3, final-centroid sensitivity for
+  5/7/8/10 cm, deterministic close-pair sequences at 10/12/15/20 cm, and 16
+  output-bearing GT groups from throttled localization logs. No commit.
+
+## 2026-09-16 — Detector-FN low-confidence audit
+
+### Goal
+
+Determine whether the 11 detector-evidence FN contain enough correct-class
+signal below confidence 0.50 to justify a conservative tabletop-only rescue,
+without changing the frozen runtime.
+
+### Done
+
+- Audited every detector FN by scenario, class, GT, P1/P2 visibility,
+  candidate frames, confidence distribution, threshold counts, and strongest
+  bbox.
+- Added observational-only aligned depth retention and offline localization of
+  every requested-class diagnostic box; formal inference and answers are
+  untouched.
+- Replayed only banana/coke/bowl and master/tomato/apple, covering an ordinary
+  FN, banana, a dangerous pair, and stable controls.
+- Added a reproducible fixed-table ROI counterfactual for thresholds
+  .10/.15/.20/.30 and 2/3/5 distinct-frame confirmations.
+
+### Results
+
+- The 11 FN classify as A=4 strong, B=1 weak, C=6 absent/non-actionable, D=0.
+- Depth coverage was 283/287 and 298/298 runtime frames in the two replays.
+- Banana at .10/.15 yielded 1 TP plus 3 FP; bowl and master yielded no TP;
+  tomato could add one isolated TP in its single replay. No policy met the
+  required +4--5 TP with few or no FP.
+- The rescue path is rejected and confidence remains 0.50. Full evidence is
+  in `docs/LOW_CONFIDENCE_DETECTOR_FN_AUDIT_2026-09-16.md`.
+
+### Next
+
+Keep the detector and decision path frozen. Preserve the diagnostic tooling,
+then return to P-004's ordered tracking-observation retention and replay gap.
+Do not rerun all nine scenes without a supported runtime candidate.
+
+### Git / Validation
+
+- Branch `work/p2-randomized-eval`, starting HEAD `1b90b24`, remote divergence
+  0/0 before this task.
+- 25 P2 evaluator tests pass, the package rebuild passes, both representative
+  full-chain runs complete, and `git diff --check` passes.
+
+## 2026-09-16 — Current-state documentation synchronization
+
+### Goal
+
+Synchronize the concise project status with the completed Final Scoring Gate,
+tracking-fragmentation audit, low-confidence detector-FN audit, and stopped
+banana work, without changing runtime behavior or creating new technical work.
+
+### Done
+
+- Reconciled `docs/PROJECT_STATUS.md` against the three evidence reports.
+- Recorded the complete frozen runtime configuration and separated it from all
+  tested-but-rejected detector, viewpoint, rescue, and tracking alternatives.
+- Preserved the existing historical worklog entries and the user's local
+  README, HANDOFF, PROJECT_STATE, and AGENTS changes.
+
+### Results
+
+- The Final Scoring Gate record is 9/9 complete runner executions, 28 GT,
+  13 TP, 7 FP, 15 FN, and 112/270 visual points, averaging 12.44/30. The
+  measured base-task center with 40 navigation points is about 52/70.
+- Localization for the 13 TP is 0.58 cm minimum, 6.08 cm median, and 8.98 cm
+  maximum; three other correct-class outputs at 10.37, 11.11, and 11.90 cm
+  each became FP+FN.
+- FN decomposition remains 11 detector-evidence, 0 depth/TF, 1
+  tracking/confirmation, 3 localization, and 0 final-filter/dedup. Duplicate FP
+  remain apple 1, tomato 1, and coke 2.
+- The low-confidence audit remains A=4, B=1, C=6, D=0. Banana at 0.10/0.15
+  added at most 1 TP with 3 FP; bowl and master candidates were about 15.1 cm
+  and 25.3 cm from GT; tomato added at most one limited TP.
+- Banana V2.1, image size 960, tiled inference, low-confidence rescue, old
+  fallback viewpoint, and new geometry viewpoint were all rejected. The new
+  viewpoint remained 0/15 alone and P1/new/P2 remained 2/15, with 0/9 problem
+  scenarios and about 53 seconds estimated added time.
+
+### Problem Updates
+
+- P-001 remains **OPEN/CRITICAL** with detector and banana development stopped.
+- P-002 remains **OPEN/HIGH**; the 9/9 gate is recorded full-runner evidence,
+  not completion of the broader randomized-layout requirement.
+- P-004 remains **OPEN/HIGH**, but tracking is not the main FN source and no
+  safe parameter or position-estimator change was validated.
+
+### Next
+
+No new action, experiment, parameter change, or project plan was established
+by this documentation-only synchronization.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting HEAD `ac4e68b`; remote divergence
+  was 0/0 after `git fetch --all --prune`.
+- Documentation-only diff review; no code, model, configuration, or new Gazebo
+  experiment was involved.
