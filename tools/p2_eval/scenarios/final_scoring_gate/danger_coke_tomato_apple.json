@@ -1,0 +1,1 @@
+{"schema_version":1,"scenario_id":"final_scoring_danger_coke_tomato_apple_seed_2026091605","seed":2026091605,"group_number":305,"targets":["coke_can","tomato_soup_can","apple"],"placements":[{"class_name":"coke_can","table_id":"living_room_table_0"},{"class_name":"tomato_soup_can","table_id":"living_room_table_2"},{"class_name":"apple","table_id":"living_room_table_3"}]}

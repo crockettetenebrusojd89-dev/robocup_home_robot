@@ -1,0 +1,1 @@
+{"schema_version":1,"scenario_id":"final_scoring_banana_coke_bowl_seed_2026091608","seed":2026091608,"group_number":308,"targets":["banana","coke_can","bowl"],"placements":[{"class_name":"banana","table_id":"living_room_table_0"},{"class_name":"coke_can","table_id":"living_room_table_2"},{"class_name":"bowl","table_id":"living_room_table_3"}]}

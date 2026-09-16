@@ -1,0 +1,1 @@
+{"schema_version":1,"scenario_id":"final_scoring_normal_beer_pudding_windex_seed_2026091603","seed":2026091603,"group_number":303,"targets":["beer","pudding_box","windex_bottle"],"placements":[{"class_name":"beer","table_id":"living_room_table_0"},{"class_name":"pudding_box","table_id":"living_room_table_2"},{"class_name":"windex_bottle","table_id":"living_room_table_3"}]}
