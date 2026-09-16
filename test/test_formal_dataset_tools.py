@@ -265,6 +265,37 @@ class FormalDatasetToolsTest(unittest.TestCase):
                 json.loads(data_yaml.read_text())['path'], str((root / 'view').resolve())
             )
 
+    def test_combined_dataset_view_prefixes_base_and_repair_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            base = root / 'base'
+            repair = root / 'repair'
+            for dataset, value in ((base, 'base'), (repair, 'repair')):
+                for kind in ('images', 'labels'):
+                    for split in ('train', 'val'):
+                        directory = dataset / kind / split
+                        directory.mkdir(parents=True)
+                        suffix = '.png' if kind == 'images' else '.txt'
+                        (directory / f'sample{suffix}').write_text(
+                            f'{value}-{kind}-{split}', encoding='utf-8'
+                        )
+                (dataset / 'classes.json').write_text(
+                    json.dumps({'classes': self.classes}), encoding='utf-8'
+                )
+            data_yaml = evaluation_core.create_combined_dataset_view(
+                base, repair, root / 'view'
+            )
+            for prefix in ('base', 'repair'):
+                self.assertTrue(
+                    (root / f'view/images/train/{prefix}_sample.png').is_symlink()
+                )
+                self.assertTrue(
+                    (root / f'view/labels/val/{prefix}_sample.txt').is_symlink()
+                )
+            self.assertEqual(
+                json.loads(data_yaml.read_text())['path'], str((root / 'view').resolve())
+            )
+
     def test_subset_reader_maps_to_view_and_rejects_duplicates(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

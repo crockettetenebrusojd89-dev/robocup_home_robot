@@ -35,6 +35,7 @@ VIEWPOINTS = (
 )
 FORMAL_CONFIDENCE = 0.50
 DIAGNOSTIC_CONFIDENCE = 0.001
+NMS_IOU = 0.70
 YAW_SAMPLES = 12
 EXPANDED_TABLE = "living_room_table_3"
 
@@ -245,6 +246,35 @@ def _all_boxes(result) -> list[dict[str, Any]]:
     return values
 
 
+def _box_iou(first: Mapping[str, Any], second: Mapping[str, Any]) -> float:
+    """Return IoU for two detector boxes without mutating either box."""
+    ax1, ay1, ax2, ay2 = first["bbox_xyxy"]
+    bx1, by1, bx2, by2 = second["bbox_xyxy"]
+    intersection_width = max(0.0, min(ax2, bx2) - max(ax1, bx1))
+    intersection_height = max(0.0, min(ay2, by2) - max(ay1, by1))
+    intersection = intersection_width * intersection_height
+    first_area = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    second_area = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = first_area + second_area - intersection
+    return intersection / union if union > 0.0 else 0.0
+
+
+def suppress_cross_class_overlaps(
+    boxes: Sequence[Mapping[str, Any]], threshold: float
+) -> list[dict[str, Any]]:
+    """Keep the higher-confidence box for high-IoU cross-class pairs."""
+    retained: list[dict[str, Any]] = []
+    for box in sorted(boxes, key=lambda item: item["confidence"], reverse=True):
+        if any(
+            box["class_name"] != other["class_name"]
+            and _box_iou(box, other) >= threshold
+            for other in retained
+        ):
+            continue
+        retained.append(dict(box))
+    return retained
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -259,6 +289,9 @@ def analyze(
     device: str,
     output: Path,
     class_order: Sequence[str],
+    image_size: int = 640,
+    agnostic_nms: bool = False,
+    cross_class_iou: float | None = None,
 ) -> dict[str, Any]:
     selected_names = set(class_order)
     records = [
@@ -274,13 +307,26 @@ def analyze(
         raise EvaluationConfigError(f"model lacks target classes: {missing}")
 
     per_placement: dict[str, dict[str, Any]] = {}
+    latency = {name: [] for name in ("preprocess", "inference", "postprocess")}
+    prediction_wall_ms = []
     for index, record in enumerate(records, start=1):
+        prediction_started = time.perf_counter()
         result = model.predict(
             source=record["image"],
             conf=DIAGNOSTIC_CONFIDENCE,
             device=device,
+            imgsz=image_size,
+            iou=NMS_IOU,
+            agnostic_nms=agnostic_nms,
             verbose=False,
         )[0]
+        prediction_wall_ms.append(
+            (time.perf_counter() - prediction_started) * 1000.0
+        )
+        for name in latency:
+            value = result.speed.get(name)
+            if value is not None:
+                latency[name].append(float(value))
         truth = (
             [record[name] for name in (
                 "truth_x1", "truth_y1", "truth_x2", "truth_y2"
@@ -289,6 +335,10 @@ def analyze(
             else None
         )
         all_boxes = _all_boxes(result)
+        if cross_class_iou is not None:
+            all_boxes = suppress_cross_class_overlaps(
+                all_boxes, cross_class_iou
+            )
         boxes = _associated(
             [box for box in all_boxes if box["class_name"] == record["class_name"]],
             truth,
@@ -429,6 +479,19 @@ def analyze(
         "device": device,
         "formal_confidence": FORMAL_CONFIDENCE,
         "diagnostic_confidence": DIAGNOSTIC_CONFIDENCE,
+        "inference_configuration": {
+            "image_size": image_size,
+            "nms_iou": NMS_IOU,
+            "agnostic_nms": agnostic_nms,
+            "cross_class_overlap_iou": cross_class_iou,
+        },
+        "latency_ms_per_frame": {
+            **{
+                name: _distribution(values)
+                for name, values in latency.items() if values
+            },
+            "wall": _distribution(prediction_wall_ms),
+        },
         "frame_count": len(records),
         "classification_rule": {
             "stable": "position success rate = 1.00",
@@ -495,6 +558,16 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--classes", nargs="*")
     parser.add_argument("--device", default="0")
+    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--agnostic-nms", action="store_true")
+    parser.add_argument(
+        "--cross-class-iou",
+        type=float,
+        help=(
+            "After Ultralytics NMS, remove a lower-confidence box when a "
+            "different-class retained box has at least this IoU."
+        ),
+    )
     parser.add_argument("--analyze-only", action="store_true")
     parser.add_argument(
         "--reuse-capture-dir",
@@ -527,6 +600,18 @@ def main(argv=None) -> int:
         unknown = sorted(set(selected_classes) - set(official_classes))
         if unknown:
             raise EvaluationConfigError(f"unknown classes: {unknown}")
+        if args.imgsz <= 0:
+            raise EvaluationConfigError("--imgsz must be positive")
+        if args.cross_class_iou is not None and not (
+            0.0 < args.cross_class_iou <= 1.0
+        ):
+            raise EvaluationConfigError(
+                "--cross-class-iou must be in (0, 1]"
+            )
+        if args.agnostic_nms and args.cross_class_iou is not None:
+            raise EvaluationConfigError(
+                "Use either --agnostic-nms or --cross-class-iou, not both"
+            )
         if not args.reuse_capture_dir and args.phase == "expanded" and not args.classes:
             raise EvaluationConfigError("expanded phase requires --classes")
         if args.reuse_capture_dir and args.analyze_only:
@@ -593,6 +678,9 @@ def main(argv=None) -> int:
             args.device,
             args.output_dir,
             selected_classes,
+            args.imgsz,
+            args.agnostic_nms,
+            args.cross_class_iou,
         )
         summary["phase"] = design.get("phase", "reused_capture")
         summary["wall_seconds"] = time.monotonic() - started

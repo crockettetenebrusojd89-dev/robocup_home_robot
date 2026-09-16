@@ -18,6 +18,7 @@ import ultralytics
 from ultralytics import YOLO
 
 from evaluation_core import create_dataset_view
+from evaluation_core import create_combined_dataset_view
 from evaluation_core import load_class_names
 from evaluation_core import require_model_contract
 
@@ -41,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--project', type=Path, default=DEFAULT_PROJECT)
     parser.add_argument('--name', default='formal_objects_v1_yolo11n')
     parser.add_argument('--data-view', type=Path)
+    parser.add_argument('--supplement', type=Path)
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--batch', type=int, default=8)
     parser.add_argument('--workers', type=int, default=4)
@@ -103,10 +105,26 @@ def validate_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
         ],
         check=True,
     )
+    supplement = None
+    if args.supplement is not None:
+        supplement = args.supplement.expanduser().resolve()
+        subprocess.run(
+            [
+                sys.executable,
+                str(TOOL_ROOT / 'scripts' / 'validate_v2_1_repair.py'),
+                str(supplement),
+            ],
+            check=True,
+        )
     data_yaml = dataset / 'data.yaml'
     if args.data_view is not None:
         data_view = args.data_view.expanduser().resolve()
-        data_yaml = create_dataset_view(dataset, data_view)
+        if supplement is None:
+            data_yaml = create_dataset_view(dataset, data_view)
+        else:
+            data_yaml = create_combined_dataset_view(
+                dataset, supplement, data_view
+            )
     return dataset, model, project, data_yaml
 
 
@@ -264,6 +282,20 @@ def main() -> int:
                 'dataset_composition_manifest.jsonl',
             )
         },
+        'supplement': (
+            {
+                'path': str(args.supplement.expanduser().resolve()),
+                'repair_contract_sha256': sha256_file(
+                    args.supplement.expanduser().resolve()
+                    / 'repair_contract.json'
+                ),
+                'repair_manifest_sha256': sha256_file(
+                    args.supplement.expanduser().resolve()
+                    / 'repair_manifest.jsonl'
+                ),
+            }
+            if args.supplement is not None else None
+        ),
         'starting_checkpoint': str(model_path),
         'starting_checkpoint_sha256': sha256_file(model_path),
         'arguments': arguments,

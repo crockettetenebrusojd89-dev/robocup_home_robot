@@ -59,6 +59,41 @@ def create_dataset_view(dataset: Path, output: Path) -> Path:
     return data_yaml
 
 
+def create_combined_dataset_view(dataset: Path, supplement: Path,
+                                 output: Path) -> Path:
+    """Create a cache-safe loader view of Formal V2 plus one repair set."""
+    dataset = dataset.resolve()
+    supplement = supplement.resolve()
+    output = output.resolve()
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f'dataset view is not empty: {output}')
+    names = load_class_names(dataset)
+    if load_class_names(supplement) != names:
+        raise ValueError('supplement class order differs from the base dataset')
+    for kind in ('images', 'labels'):
+        for split in ('train', 'val'):
+            destination = output / kind / split
+            destination.mkdir(parents=True, exist_ok=True)
+            for prefix, source in (
+                ('base_', dataset / kind / split),
+                ('repair_', supplement / kind / split),
+            ):
+                for path in sorted(source.iterdir()):
+                    if path.is_file():
+                        (destination / f'{prefix}{path.name}').symlink_to(
+                            path.resolve()
+                        )
+    document = {
+        'path': str(output),
+        'train': 'images/train',
+        'val': 'images/val',
+        'names': {index: name for index, name in enumerate(names)},
+    }
+    data_yaml = output / 'data.yaml'
+    data_yaml.write_text(json.dumps(document, indent=2) + '\n', encoding='utf-8')
+    return data_yaml
+
+
 def load_subset_images(dataset: Path, subset_file: Path,
                        data_root: Path | None = None) -> list[Path]:
     """Resolve a validated subset list against source or loader-view data."""

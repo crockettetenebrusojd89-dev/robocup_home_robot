@@ -278,3 +278,78 @@ unrelated runtime work.
   `ament_flake8`; `git diff --check` passed; all accepted Gazebo evidence logs
   had zero missing-resource/geometry errors. Full evidence is in
   `docs/FORMAL_MODEL_V2_EXTERNAL_GATE_2026-09-16.md`.
+
+## 2026-09-16 — Competition-domain low-cost audit and V2.1 repair
+
+### Goal
+
+Use the preserved external Gate evidence to test target-whitelist containment,
+overlap suppression, and higher banana inference resolution before permitting
+exactly one bounded V2.1 repair fine-tune. Keep P1/P2, confidence 0.50, and all
+navigation/localization/deduplication settings unchanged.
+
+### Done
+
+- Audited the judge-target data path. All 18 classes currently reach
+  localization and tracking, while the final answer snapshot admits only the
+  three requested classes.
+- Enumerated every possible three-target whitelist over the untouched epoch31
+  spatial evidence and replayed current, class-agnostic, and IoU-0.50
+  cross-class suppression on the same RGB frames.
+- Replayed the same 15 banana placements at image sizes 640 and 960 with
+  per-stage latency measurement. Stopped without 1280 when 960 remained below
+  the prescribed decision threshold.
+- Generated and validated an independent 465-image V2.1 supplement containing
+  banana hard positives, master/coke/tomato confusion positives, competition
+  room hard negatives, and tuna corner/yaw positives. The original external
+  Gate remained untouched and had zero exact, pose/yaw, or scene-group overlap.
+- Performed the only authorized short V2.1 fine-tune from epoch31, then replayed
+  untouched banana, coke, master, beer, and lighting evidence.
+
+### Results
+
+- The original evidence has 74 target-overlap wrong-class boxes on 48/150
+  placements. Across 816 three-target sets, the whitelist changes median wrong
+  boxes from 8 to 0 and the 90th percentile from 31 to 4. The worst set,
+  `coke_can + master_chef_can + tomato_soup_can`, still retains 38 boxes.
+- Class-agnostic NMS and IoU-0.50 cross-class suppression both change 136/150
+  TP placements and 74 wrong boxes to 135/150 and 73. Both lose the only
+  correct box at `master_chef_can_03`; neither is recommended.
+- Banana is 2/15 at 640 and 3/15 at 960, with the difficult-yaw group 0/9 at
+  both sizes. Median wall latency rises from 7.772 to 8.869 ms, and 960 adds 15
+  fixed-background pudding FPs. Higher resolution is rejected.
+- V2.1 training used 10 epochs, batch 8, image size 640, AdamW, `lr0=0.0002`,
+  seed 0, deterministic full-layer fine-tuning. Its checkpoint SHA256 is
+  `eeb638f4...3e90`.
+- V2.1 still scores banana 2/15 and difficult yaw 0/9. Master wrong boxes fall
+  27 to 8 and lighting wrong boxes 91 to 29, but beer regresses from zero to
+  eight target-overlap wrong boxes on seven placements. V2.1 is rejected;
+  epoch31 remains the least-bad fallback but is not approved or frozen.
+
+### Problem Updates
+
+- P-001 remains **OPEN**. Neither inference-only repair nor the one permitted
+  V2.1 run closes the competition-domain detector gate.
+- P-002 remains **BLOCKED**. The formal `/map` 10 cm, final-FP, and full-runner
+  gate must not be reported as ready while the detector remains unfrozen.
+- P-003 through P-009 are unchanged. No P1/P2, confidence, Nav2, AMCL, TF,
+  RGB-D, localization, deduplication, corner, FR3, or MoveIt setting changed.
+
+### Next
+
+Stop model work and do not train or sweep again. Keep epoch31, reject V2.1,
+and treat banana plus requested-pair master/tomato and coke/tomato confusion as
+explicit competition risk. An early three-target whitelist is the only
+evidenced runtime containment candidate, but it requires separate authorization
+and cannot recover missed banana detections.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting HEAD `8934c718`.
+- Commit: the commit containing this entry.
+- Validation: V2.1 validator passed with 372 train and 93 val images and zero
+  leakage; 18 focused P2 and 18 formal-dataset tests passed; seven edited
+  Python files passed `ament_flake8`, and the five executable scripts passed
+  syntax compilation; the edited C++ capture worker compiled with
+  `-Wall -Wextra -Wpedantic`; `git diff --check` passed. Full evidence is in
+  `docs/FORMAL_MODEL_V2_1_REPAIR_2026-09-16.md`.

@@ -25,6 +25,7 @@ from run_repeatability import repeatability_row
 from run_lighting_robustness_gate import apply_lighting_profile
 from run_lighting_robustness_gate import build_design as build_lighting_design
 from run_lighting_robustness_gate import load_profiles
+from run_18_class_robustness_audit import suppress_cross_class_overlaps
 from run_tabletop_robustness_gate import render_resource_failures
 
 
@@ -35,6 +36,30 @@ MANIFEST = PACKAGE_ROOT / "tools/formal_dataset/classes.json"
 
 
 class P2EvaluationTest(unittest.TestCase):
+    def test_cross_class_overlap_suppression_keeps_higher_confidence(self):
+        boxes = [
+            {
+                "class_name": "master_chef_can",
+                "confidence": 0.91,
+                "bbox_xyxy": [10.0, 10.0, 30.0, 30.0],
+            },
+            {
+                "class_name": "tomato_soup_can",
+                "confidence": 0.72,
+                "bbox_xyxy": [11.0, 11.0, 31.0, 31.0],
+            },
+            {
+                "class_name": "coke_can",
+                "confidence": 0.88,
+                "bbox_xyxy": [40.0, 10.0, 60.0, 30.0],
+            },
+        ]
+        retained = suppress_cross_class_overlaps(boxes, 0.50)
+        self.assertEqual(
+            [box["class_name"] for box in retained],
+            ["master_chef_can", "coke_can"],
+        )
+
     def _base_world(self, directory: Path) -> Path:
         path = directory / "base.world"
         path.write_text(

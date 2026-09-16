@@ -7,16 +7,16 @@
 ## Current Stage
 
 P2 robustness work for the 70-point autonomous navigation and visual counting
-task. The Formal Model V2 competition-domain external detector gate is
-complete and failed; detector replacement and freeze remain blocked on
-systematic banana misses and wrong-class FP behavior.
+task. The low-cost inference/post-processing audit and the only authorized
+V2.1 repair fine-tune are complete. Both failed to close the external detector
+gate, so detector replacement and freeze remain blocked.
 
 ## Current Goal
 
-Keep P-001 scoped to the smallest competition-domain correction for banana and
-cross-class/background detector FPs. Do not start runtime integration, 3D
-localization, deduplication tuning, a broad checkpoint sweep, or unrelated
-competition work until the detector gate is rerun.
+Preserve epoch31 as the least-bad current checkpoint and V2.1 as rejected
+evidence. Do not run another model training or sweep. Treat banana and the
+master/tomato and coke/tomato requested-pair confusions as explicit competition
+blockers while deciding the narrowest event-week containment action.
 
 ## Open Problems
 
@@ -27,17 +27,19 @@ competition work until the detector gate is rerun.
 - **Problem:** The selected V2 checkpoint is still unreliable for banana and
   produces systematic target-confusion and lighting-dependent background FPs.
 - **Key evidence:** At confidence 0.50 and frozen P1/P2, epoch31 achieved
-  banana 2/15, corrected beer 15/15, master_chef_can 15/15, and all three
-  borderline classes 15/15. Stable classes were 5/5 except tuna_fish_can 4/5.
-  All four lighting focus classes were 12/12 with no confidence collapse, but
-  every lighting trial had a repeatable background wrong-class box and master
-  had target-overlap confusion in 8/12 trials. Epoch40 reached only banana
-  4/15 in the identical A/B. Full evidence is in
-  `docs/FORMAL_MODEL_V2_EXTERNAL_GATE_2026-09-16.md`.
-- **Next step:** Do not freeze or integrate either V2 checkpoint. Use the
-  preserved competition-domain failures to define one bounded banana and
-  wrong-class-FP correction, then rerun the identical spatial, lighting, and
-  stable gates without changing confidence or viewpoints.
+  banana 2/15. Image size 960 reached only 3/15 and remained 0/9 on the
+  difficult yaw group. Class-agnostic NMS and IoU-0.50 cross-class suppression
+  reduced wrong boxes only 74 to 73 while losing a master TP. The one permitted
+  465-image V2.1 repair run still achieved banana 2/15. It reduced master wrong
+  boxes from 27 to 8 and lighting wrong boxes from 91 to 29, but polluted beer
+  from zero to eight wrong boxes on seven placements. Full evidence is in
+  `docs/FORMAL_MODEL_V2_1_REPAIR_2026-09-16.md`.
+- **Next step:** Keep epoch31 rather than V2.1, but do not freeze the detector
+  or claim readiness for the formal `/map` 10 cm/final-FP/full-runner gate.
+  No further training is authorized. If a runtime change is separately
+  authorized, move the existing three-target whitelist before depth/tracking;
+  this contains irrelevant-class FPs but cannot repair requested-pair
+  confusion or missed banana detections.
 
 ### P-002 — Competition-like full-chain reliability is not established
 
@@ -142,8 +144,9 @@ competition work until the detector gate is rerun.
 
 ## Next Step
 
-Stop this completed gate work. P-001 remains the only next model task: plan one
-bounded competition-domain correction for the systematic banana and FP
-failures, then rerun the same confidence-0.50 P1/P2 and lighting evidence. Do
-not start V2 runtime integration, depth/TF, deduplication, Nav2, FR3/MoveIt, or
-a broad retraining/checkpoint sweep before that decision.
+Stop this completed repair work. P-001 remains OPEN after the low-cost audit
+and the only authorized V2.1 run. Retain epoch31 as the least-bad fallback,
+reject V2.1, and do not start another training run, checkpoint sweep, or formal
+downstream gate. The only evidenced runtime containment candidate is an early
+three-target whitelist; it requires separate authorization and does not solve
+banana or requested-pair confusion.
