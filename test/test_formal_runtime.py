@@ -8,6 +8,7 @@ import unittest
 
 from formal_runtime_config import load_aliases
 from formal_runtime_config import load_class_manifest
+from formal_runtime_config import filter_target_detections
 from formal_runtime_config import parse_group_number
 from formal_runtime_config import resolve_target_classes
 from formal_runtime_config import validate_answer_document
@@ -43,6 +44,23 @@ class FormalRuntimeTest(unittest.TestCase):
             self.aliases,
         )
         self.assertEqual(resolved, ('apple', 'chips_can', 'windex_bottle'))
+
+    def test_detector_whitelist_runs_before_localization(self):
+        detections = [
+            ('master_chef_can', 0.91, 1, 2, 3, 4),
+            ('tomato_soup_can', 0.88, 5, 6, 7, 8),
+            ('coke_can', 0.86, 9, 10, 11, 12),
+            ('banana', 0.82, 13, 14, 15, 16),
+        ]
+        filtered = filter_target_detections(
+            detections,
+            ('master_chef_can', 'tomato_soup_can', 'banana'),
+        )
+        self.assertEqual(
+            [detection[0] for detection in filtered],
+            ['master_chef_can', 'tomato_soup_can', 'banana'],
+        )
+        self.assertNotIn('coke_can', [item[0] for item in filtered])
 
     def test_surrounding_whitespace_is_removed_only(self):
         resolved = resolve_target_classes(

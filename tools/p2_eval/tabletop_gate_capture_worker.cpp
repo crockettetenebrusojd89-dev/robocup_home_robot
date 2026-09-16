@@ -143,7 +143,7 @@ Plan ReadPlan(const fs::path & _path)
     }
   }
   if (plan.worldName.empty() || plan.cameraName.empty() ||
-    plan.viewpoints.size() < 2 || plan.placements.empty() ||
+    plan.viewpoints.empty() || plan.placements.empty() ||
     plan.yawSamples <= 0)
   {
     throw std::runtime_error("capture plan is incomplete");

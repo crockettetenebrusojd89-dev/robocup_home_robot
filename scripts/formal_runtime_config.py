@@ -122,6 +122,18 @@ def resolve_target_classes(
     return tuple(resolved)
 
 
+def filter_target_detections(
+    detections: Sequence[Sequence[Any]],
+    target_classes: Sequence[str],
+) -> list[Sequence[Any]]:
+    """Keep only detections whose first field is a requested target class."""
+    targets = frozenset(target_classes)
+    return [
+        detection for detection in detections
+        if detection and detection[0] in targets
+    ]
+
+
 def parse_group_number(raw_value: str | int) -> int:
     """Return one positive submission group number without bool coercion."""
     if isinstance(raw_value, bool):

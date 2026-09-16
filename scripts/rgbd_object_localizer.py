@@ -35,6 +35,7 @@ from ultralytics import YOLO
 from visualization_msgs.msg import Marker, MarkerArray
 from vision_final_dedup import final_deduplicate_clusters
 from vision_final_dedup import partition_by_minimum_observations
+from formal_runtime_config import filter_target_detections
 from formal_runtime_config import validate_model_contract
 
 
@@ -545,7 +546,7 @@ class RgbdObjectLocalizer(Node):
                     y2,
                 )
             )
-        return detections
+        return filter_target_detections(detections, self.target_classes)
 
     def _median_bbox_depth(self, depth_image, detection):
         _, _, x1, y1, x2, y2 = detection

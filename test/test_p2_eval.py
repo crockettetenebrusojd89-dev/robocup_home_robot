@@ -26,6 +26,8 @@ from run_lighting_robustness_gate import apply_lighting_profile
 from run_lighting_robustness_gate import build_design as build_lighting_design
 from run_lighting_robustness_gate import load_profiles
 from run_18_class_robustness_audit import suppress_cross_class_overlaps
+from run_banana_inference_repair_audit import same_class_nms
+from run_banana_inference_repair_audit import tile_windows
 from run_tabletop_robustness_gate import render_resource_failures
 
 
@@ -36,6 +38,38 @@ MANIFEST = PACKAGE_ROOT / "tools/formal_dataset/classes.json"
 
 
 class P2EvaluationTest(unittest.TestCase):
+    def test_banana_tiles_cover_frame_with_overlap(self):
+        windows = tile_windows(640, 480, 0.20)
+        self.assertEqual(len(windows), 4)
+        self.assertEqual(windows[0][:2], (0, 0))
+        self.assertEqual(windows[-1][2:], (640, 480))
+        self.assertGreater(windows[0][2], windows[1][0])
+        self.assertGreater(windows[0][3], windows[2][1])
+
+    def test_tile_nms_merges_only_same_class_duplicates(self):
+        boxes = [
+            {
+                "class_name": "banana",
+                "confidence": 0.91,
+                "bbox_xyxy": [10.0, 10.0, 30.0, 30.0],
+            },
+            {
+                "class_name": "banana",
+                "confidence": 0.72,
+                "bbox_xyxy": [11.0, 11.0, 31.0, 31.0],
+            },
+            {
+                "class_name": "tomato_soup_can",
+                "confidence": 0.70,
+                "bbox_xyxy": [11.0, 11.0, 31.0, 31.0],
+            },
+        ]
+        retained = same_class_nms(boxes)
+        self.assertEqual(
+            [box["class_name"] for box in retained],
+            ["banana", "tomato_soup_can"],
+        )
+
     def test_cross_class_overlap_suppression_keeps_higher_confidence(self):
         boxes = [
             {

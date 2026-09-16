@@ -6,17 +6,17 @@
 
 ## Current Stage
 
-P2 robustness work for the 70-point autonomous navigation and visual counting
-task. The low-cost inference/post-processing audit and the only authorized
-V2.1 repair fine-tune are complete. Both failed to close the external detector
-gate, so detector replacement and freeze remain blocked.
+Event-week runtime containment for the 70-point autonomous navigation and
+visual counting task. Target whitelist filtering is now applied before depth
+and tracking. Tiled inference, low-confidence banana candidates, and one fixed
+close-range fallback were measured and rejected. Epoch31 is the frozen
+competition checkpoint even though the banana robustness problem remains open.
 
 ## Current Goal
 
-Preserve epoch31 as the least-bad current checkpoint and V2.1 as rejected
-evidence. Do not run another model training or sweep. Treat banana and the
-master/tomato and coke/tomato requested-pair confusions as explicit competition
-blockers while deciding the narrowest event-week containment action.
+Stop visual model development and preserve the measured detector limitations.
+Proceed next to the formal `/map` 10 cm, final-FP, and `answer.json` gate using
+epoch31, confidence 0.50, unchanged P1/P2, and the early target whitelist.
 
 ## Open Problems
 
@@ -33,26 +33,28 @@ blockers while deciding the narrowest event-week containment action.
   465-image V2.1 repair run still achieved banana 2/15. It reduced master wrong
   boxes from 27 to 8 and lighting wrong boxes from 91 to 29, but polluted beer
   from zero to eight wrong boxes on seven placements. Full evidence is in
-  `docs/FORMAL_MODEL_V2_1_REPAIR_2026-09-16.md`.
-- **Next step:** Keep epoch31 rather than V2.1, but do not freeze the detector
-  or claim readiness for the formal `/map` 10 cm/final-FP/full-runner gate.
-  No further training is authorized. If a runtime change is separately
-  authorized, move the existing three-target whitelist before depth/tracking;
-  this contains irrelevant-class FPs but cannot repair requested-pair
-  confusion or missed banana detections.
+  `docs/FORMAL_MODEL_V2_1_REPAIR_2026-09-16.md`. The final runtime audit found
+  tiled inference 1/15, low-confidence replay at most 1/15 after five distinct
+  saved frames, and P1/P2 plus a close fallback only 4/15. Full evidence is in
+  `docs/BANANA_RUNTIME_REPAIR_2026-09-16.md`.
+- **Next step:** Treat epoch31 as the frozen event checkpoint and P-001 as an
+  accepted HIGH competition risk, not a solved detector. Do not train, sweep,
+  tile, lower confidence, or add the rejected fallback. Record banana and
+  requested-pair confusion failures during the next end-to-end gate.
 
 ### P-002 — Competition-like full-chain reliability is not established
 
-- **Status:** BLOCKED
+- **Status:** OPEN
 - **Priority:** HIGH
 - **Problem:** Ten different randomized layouts with temporary obstacles,
   occlusion, and the eight-minute cap have not been completed.
 - **Key evidence:** After the startup correction, the fixed-seed gate achieved
   Gazebo/Nav2 startup 5/5 but complete-task success 4/5; scores were 50, 50,
   50, 0, and 48 out of 70. Existing broader evidence covers only one seed.
-- **Next step:** After P-001 passes its model gate, run the different-seed
-  randomized full-chain evaluation and classify failures by navigation,
-  detection, localization, deduplication, and timing stage.
+- **Next step:** With detector development frozen for the event, first run the
+  formal `/map` 10 cm, final-FP, and `answer.json` gate. Then run only the
+  highest-value different-seed full-chain trials remaining before competition,
+  classifying failures by stage and retaining P-001 as known detector risk.
 
 ### P-003 — Judge target-name input contract is unknown
 
@@ -142,11 +144,25 @@ blockers while deciding the narrowest event-week containment action.
 - **Next step:** Preserve the older trees as invalid evidence and require the
   resource-complete capture path for every future visual gate.
 
+### P-010 — Non-target detector classes entered localization and tracking
+
+- **Status:** SOLVED
+- **Priority:** HIGH
+- **Problem:** The 18-class detector's confidence-passing non-target boxes
+  reached depth, TF, markers, and tracking even though the final answer emitted
+  only the three judge targets.
+- **Key evidence:** The runtime now filters decoded detections against the
+  already validated three-target set before any depth work. Focused tests keep
+  both classes when master/tomato are requested together and reject an
+  unrequested coke detection. Final answer filtering and model class order are
+  unchanged.
+- **Next step:** Reopen as `REGRESSED` only if a non-target class reaches
+  localization telemetry, tracking, markers, or `answer.json`.
+
 ## Next Step
 
-Stop this completed repair work. P-001 remains OPEN after the low-cost audit
-and the only authorized V2.1 run. Retain epoch31 as the least-bad fallback,
-reject V2.1, and do not start another training run, checkpoint sweep, or formal
-downstream gate. The only evidenced runtime containment candidate is an early
-three-target whitelist; it requires separate authorization and does not solve
-banana or requested-pair confusion.
+Stop this completed detector/runtime repair work. P-001 remains OPEN but model
+selection is frozen on epoch31 for competition; P-002 is now OPEN rather than
+blocked. In the next task, run the formal `/map` 10 cm, final-FP, and
+`answer.json` gate with the early whitelist. Do not continue automatically into
+the full competition runner, additional model work, FR3, or MoveIt/MTC.

@@ -353,3 +353,74 @@ and cannot recover missed banana detections.
   syntax compilation; the edited C++ capture worker compiled with
   `-Wall -Wextra -Wpedantic`; `git diff --check` passed. Full evidence is in
   `docs/FORMAL_MODEL_V2_1_REPAIR_2026-09-16.md`.
+
+## 2026-09-16 — Banana runtime containment and final event-week decision
+
+### Goal
+
+Without training or changing the formal confidence and viewpoints, test early
+target whitelisting, 2x2 tiled banana inference, low-confidence banana
+candidate confirmation, and at most one fixed close-range fallback. Select the
+smallest defensible event-week runtime repair.
+
+### Done
+
+- Re-audited the judge-target path and moved the existing validated three-class
+  whitelist immediately after detector decoding, before depth, TF, markers,
+  and tracking. The 18-class model and final answer boundary remain unchanged.
+- Replayed all 720 untouched banana external RGB frames through full-frame 640
+  and four 20%-overlapping 640-input tiles, with full-frame box remapping,
+  same-class merge, latency, raw FP, whitelist FP, and duplicate accounting.
+- Replayed banana-only candidate thresholds 0.10, 0.15, and 0.20 with strict
+  distinct-scan-frame confirmation and a conservative real-dwell FP bound.
+- Selected one fixed fallback pose from table geometry and the static map,
+  captured all 15 original placements at the original object yaw, and ran one
+  Nav2 reachability/scan/answer-save trial. No GT selected the pose.
+
+### Results
+
+- Full-frame remains 2/15 and 0/9 difficult placements at 8.109 ms median.
+  Tiled inference falls to 1/15 and 0/9, increases latency to 14.975 ms, and
+  produces 60 irrelevant-class boxes. It is rejected.
+- At thresholds 0.10/0.15, eight placements have any target candidate, seven
+  reach three distinct frames, but only one reaches five and none is in the
+  difficult group. All 15 placements contain background banana candidates;
+  the real two-second dwell can repeat one static FP to five confirmations.
+  Threshold 0.20 is weaker. No candidate threshold is adopted.
+- The fallback `(-3.300, -1.800, -1.723)` is Nav2 reachable without collision.
+  Its scan run completes successfully, but fallback-only recall is 2/15 and
+  P1/P2 plus fallback is only 4/15 and 1/9 difficult placements. It also adds
+  one `coke_can` wrong box per placement and costs an estimated 75 seconds when
+  appended after P2. It is rejected.
+- Only the early whitelist is retained. It removes non-target upstream work but
+  does not change existing final-answer semantics or solve requested-pair
+  master/tomato and coke/tomato confusion.
+
+### Problem Updates
+
+- P-001 remains **OPEN**, with banana and requested-pair confusion explicitly
+  accepted as HIGH event risk. Epoch31 is frozen as the competition checkpoint;
+  no more detector/model development is authorized.
+- P-002 changes from **BLOCKED** to **OPEN**. Schedule value now favors the
+  formal `/map` 10 cm, final-FP, and `answer.json` gate over further detector
+  experiments.
+- P-010 is **SOLVED**: non-target classes are filtered before localization and
+  tracking, with focused regression coverage.
+- Other problem states are unchanged.
+
+### Next
+
+Stop this work. In a new task, run the formal `/map` 10 cm, final-FP, and
+`answer.json` gate using epoch31, confidence 0.50, unchanged P1/P2, and the
+early whitelist. Do not continue automatically into the full runner or FR3.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting HEAD `2ef23326`.
+- Commit: the commit containing this entry.
+- Validation: 20 focused P2, 14 formal-runtime, and 9 dedup tests passed; six
+  edited Python files passed style checks and four executable scripts passed
+  syntax compilation; the C++ worker compiled with strict warnings; Gazebo
+  fallback capture had zero render-resource errors; and one Nav2 fallback trial
+  completed successfully. Full evidence is in
+  `docs/BANANA_RUNTIME_REPAIR_2026-09-16.md`.
