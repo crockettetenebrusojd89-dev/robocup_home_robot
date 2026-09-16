@@ -706,3 +706,42 @@ by this documentation-only synchronization.
   was 0/0 after `git fetch --all --prune`.
 - Documentation-only diff review; no code, model, configuration, or new Gazebo
   experiment was involved.
+
+## 2026-09-16 — RGB-D tabletop object proposal POC
+
+### Goal
+
+Determine, without YOLO or object-position input, whether fixed tabletop
+geometry plus saved RGB-D can form stable 3-D object proposals that justify a
+future crop-classification design.
+
+### Done
+
+- Audited the four eligible living-room table polygons, current RGB-D/TF path,
+  and replay evidence; added a standalone offline replayer and focused tests.
+- Replayed two depth/TF-complete audit runs over eight fixed rotation frames at
+  each P1/P2 viewpoint. GT was used only for post-hoc one-to-one scoring.
+
+### Results
+
+- Stable proposal recall was 0/6; frame recall was 10/192 and there were six
+  false proposals. Banana matched only 2/16 frames and was not stable.
+- The fixed rule is therefore FAIL. No close-pair expansion, crop inference,
+  classifier, runtime edit, model training, or formal parameter change was run.
+  Full evidence is in `docs/TABLETOP_RGBD_PROPOSAL_POC_2026-09-16.md`.
+
+### Problem Updates
+
+- P-011 is **SOLVED** with verdict **FAIL**: the proposed bypass does not meet
+  its stable-recall or banana gate. P-001, P-002, and P-004 are unchanged.
+
+### Next
+
+Stop this route. Preserve the frozen formal runtime; do not integrate tabletop
+proposals or continue into crop inference without new authorization.
+
+### Git / Validation
+
+- Branch: `work/p2-randomized-eval`; starting and remote HEAD `fa3107b`.
+- Validation: standalone Python syntax check, two focused POC tests, offline
+  replay of two saved depth/TF corpora, and `git diff --check`.

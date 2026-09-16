@@ -22,8 +22,8 @@ early target whitelisting, P1 `(-3.485, -1.115, -0.532)`, P2
 `(0.265, -0.665, -2.638)`, 5 cm online association, 8 cm final deduplication,
 five final confirmations, and the existing position estimator. Detector and
 banana development is stopped. No audited low-confidence, tracking, dedup,
-confirmation, viewpoint, or position-estimator change has replaced this
-baseline.
+confirmation, viewpoint, position-estimator, or tabletop-proposal change has
+replaced this baseline.
 
 ## Open Problems
 
@@ -198,10 +198,26 @@ baseline.
 - **Next step:** Reopen as `REGRESSED` only if a non-target class reaches
   localization telemetry, tracking, markers, or `answer.json`.
 
+### P-011 — RGB-D tabletop proposal bypass feasibility
+
+- **Status:** SOLVED
+- **Priority:** HIGH
+- **Problem:** It was unknown whether fixed living-room table geometry plus
+  class-agnostic RGB-D clustering could provide stable object proposals and
+  bypass full-frame detector misses without changing the formal system.
+- **Key evidence:** The independent offline POC replayed two depth/TF-complete
+  audit runs over eight fixed rotation frames at P1 and P2 each. Across six GT,
+  stable proposal recall was 0/6 and frame recall 10/192; banana matched only
+  2/16 frames and was not stable. Six unmatched proposals remained. The POC
+  therefore meets its declared FAIL stop rule. Evidence is in
+  `docs/TABLETOP_RGBD_PROPOSAL_POC_2026-09-16.md`.
+- **Next step:** Do not add crop inference, a classifier, a runtime branch, or
+  further parameter sweeps from this route unless a new, separately authorized
+  sensor representation changes the premise.
+
 ## Next Step
 
-This documentation synchronization establishes no new project action. The
-current recorded state is the frozen epoch31/P1/P2 baseline above, with
-low-confidence rescue, banana alternatives, and the audited tracking parameter
-changes rejected. No safe runtime parameter modification is currently
-validated.
+The tabletop proposal POC is rejected. The current recorded state is the frozen
+epoch31/P1/P2 baseline above, with low-confidence rescue, banana alternatives,
+tabletop proposals, and audited tracking parameter changes rejected. No safe
+runtime parameter modification is currently validated.
