@@ -100,6 +100,82 @@ def _target_boxes(result, target: str) -> list[dict[str, Any]]:
     return sorted(target_boxes, key=lambda item: item["confidence"], reverse=True)
 
 
+def median_bbox_depth(
+    depth_image: np.ndarray,
+    box: Mapping[str, Any],
+    roi_ratio: float = 0.40,
+    minimum_roi_size: int = 5,
+    minimum_valid_pixels: int = 5,
+    minimum_depth_m: float = 0.20,
+    maximum_depth_m: float = 5.00,
+) -> dict[str, Any] | None:
+    """Mirror the runtime's central-bbox median depth for offline evidence."""
+    height, width = depth_image.shape[:2]
+    x1, y1, x2, y2 = (float(value) for value in box["bbox_xyxy"])
+    x1 = max(0.0, min(width - 1.0, x1))
+    x2 = max(0.0, min(width - 1.0, x2))
+    y1 = max(0.0, min(height - 1.0, y1))
+    y2 = max(0.0, min(height - 1.0, y2))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    center_u = (x1 + x2) * 0.5
+    center_v = (y1 + y2) * 0.5
+    roi_width = max(minimum_roi_size, int(round((x2 - x1) * roi_ratio)))
+    roi_height = max(minimum_roi_size, int(round((y2 - y1) * roi_ratio)))
+    roi_x1 = max(0, int(round(center_u - roi_width * 0.5)))
+    roi_x2 = min(width, roi_x1 + roi_width)
+    roi_y1 = max(0, int(round(center_v - roi_height * 0.5)))
+    roi_y2 = min(height, roi_y1 + roi_height)
+    roi = depth_image[roi_y1:roi_y2, roi_x1:roi_x2]
+    valid = (
+        np.isfinite(roi)
+        & (roi >= minimum_depth_m)
+        & (roi <= maximum_depth_m)
+    )
+    values = roi[valid]
+    if values.size < minimum_valid_pixels:
+        return None
+    return {
+        "u": center_u,
+        "v": center_v,
+        "depth_m": float(np.median(values)),
+        "valid_depth_pixels": int(values.size),
+    }
+
+
+def localize_box(
+    depth_image: np.ndarray,
+    box: Mapping[str, Any],
+    map_to_camera: Mapping[str, Any] | None,
+    camera_info: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return depth and map evidence without changing runtime decisions."""
+    depth = median_bbox_depth(depth_image, box)
+    if depth is None:
+        return {"depth_valid": False, "map_valid": False}
+    if map_to_camera is None:
+        return {**depth, "depth_valid": True, "map_valid": False}
+    k = camera_info["k"]
+    point_camera = np.array([
+        (depth["u"] - float(k[2])) * depth["depth_m"] / float(k[0]),
+        (depth["v"] - float(k[5])) * depth["depth_m"] / float(k[4]),
+        depth["depth_m"],
+    ])
+    rotation = _quaternion_matrix(map_to_camera["rotation"])
+    translation = map_to_camera["translation"]
+    point_map = rotation @ point_camera + np.array([
+        float(translation["x"]),
+        float(translation["y"]),
+        float(translation["z"]),
+    ])
+    return {
+        **depth,
+        "depth_valid": True,
+        "map_valid": bool(np.isfinite(point_map).all()),
+        "map_xyz": [float(value) for value in point_map],
+    }
+
+
 def _unique_raw_frames(manifest: list[dict[str, Any]]):
     frames: dict[int, dict[str, Any]] = {}
     priority = {"raw_periodic": 1, "runtime_raw": 2}
@@ -290,6 +366,11 @@ def analyze_capture(
     camera_info = _read_json(capture_dir / "camera_info.json")
     manifest = _read_jsonl(capture_dir / "frames.jsonl")
     frames, runtime_stamps = _unique_raw_frames(manifest)
+    depth_by_rgb_stamp = {
+        int(record["rgb_stamp_ns"]): record
+        for record in manifest
+        if record.get("kind") == "runtime_depth"
+    }
     _fill_nearest_transforms(frames)
     if model is None:
         model = YOLO(str(model_path))
@@ -322,6 +403,14 @@ def analyze_capture(
         )[0]
         frame = dict(frame)
         frame["targets"] = {}
+        depth_record = depth_by_rgb_stamp.get(int(frame["stamp_ns"]))
+        depth_image = None
+        if depth_record is not None:
+            stored = cv2.imread(depth_record["path"], cv2.IMREAD_UNCHANGED)
+            if stored is not None:
+                depth_image = stored.astype(np.float32) * float(
+                    depth_record["depth_scale_m"]
+                )
         for target in targets:
             projection = project_map_point(
                 truth_by_target[target], frame.get("map_to_camera"), camera_info
@@ -343,10 +432,24 @@ def analyze_capture(
                 if _box_matches_projection(box, projection)
             ]
             best = diagnostic_boxes[0] if diagnostic_boxes else None
+            diagnostic_localizations = []
+            if depth_image is not None:
+                for box in diagnostic_class_boxes:
+                    diagnostic_localizations.append({
+                        **box,
+                        **localize_box(
+                            depth_image,
+                            box,
+                            frame.get("map_to_camera"),
+                            camera_info,
+                        ),
+                    })
             frame["targets"][target] = {
                 "projection": projection,
                 "projected_center_in_frame": projected_in_frame,
                 "best_box": best,
+                "diagnostic_class_boxes": diagnostic_class_boxes,
+                "diagnostic_localizations": diagnostic_localizations,
                 "exact_best_box": exact_boxes[0] if exact_boxes else None,
                 "exact_detection_count": len(exact_boxes),
                 "exact_class_detection_count": len(exact_class_boxes),
@@ -494,6 +597,7 @@ def analyze_capture(
             / len(runtime_stamps)
             if runtime_stamps else None
         ),
+        "runtime_depth_frame_count": len(depth_by_rgb_stamp),
         "classes": classes,
         "artifacts": {
             "per_frame": str(frame_path.resolve()),

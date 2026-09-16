@@ -14,6 +14,7 @@ import time
 
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
+import numpy as np
 import rclpy
 from rcl_interfaces.msg import Log
 from rclpy.duration import Duration
@@ -79,8 +80,14 @@ class VisibilityCapture(Node):
         self.output_dir = output_dir
         self.raw_dir = output_dir / "raw"
         self.runtime_raw_dir = output_dir / "runtime_raw"
+        self.runtime_depth_dir = output_dir / "runtime_depth"
         self.annotated_dir = output_dir / "annotated"
-        for directory in (self.raw_dir, self.runtime_raw_dir, self.annotated_dir):
+        for directory in (
+            self.raw_dir,
+            self.runtime_raw_dir,
+            self.runtime_depth_dir,
+            self.annotated_dir,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
         self.capture_period_ns = int(1_000_000_000 / capture_hz)
         self.jpeg_quality = jpeg_quality
@@ -94,6 +101,7 @@ class VisibilityCapture(Node):
         self.viewpoint_total = 0
         self.last_periodic_stamp_ns = None
         self.raw_cache: OrderedDict[int, Image] = OrderedDict()
+        self.depth_cache: OrderedDict[int, Image] = OrderedDict()
         self.cache_limit = 90
         self.saved_periodic_stamps: set[int] = set()
         self.runtime_stamps: set[int] = set()
@@ -103,6 +111,9 @@ class VisibilityCapture(Node):
             "runtime_annotated_saved": 0,
             "runtime_raw_saved": 0,
             "runtime_raw_missing": 0,
+            "depth_messages": 0,
+            "runtime_depth_saved": 0,
+            "runtime_depth_missing": 0,
             "camera_info_messages": 0,
             "image_write_failures": 0,
             "tf_lookup_failures": 0,
@@ -118,6 +129,12 @@ class VisibilityCapture(Node):
             Image,
             "/camera/color/image_raw",
             self._raw_callback,
+            qos_profile_sensor_data,
+        )
+        self.create_subscription(
+            Image,
+            "/camera/depth/image_raw",
+            self._depth_callback,
             qos_profile_sensor_data,
         )
         self.create_subscription(
@@ -152,6 +169,7 @@ class VisibilityCapture(Node):
                 "jpeg_quality": jpeg_quality,
                 "topics": [
                     "/camera/color/image_raw",
+                    "/camera/depth/image_raw",
                     "/vision/detections_image",
                     "/camera/camera_info",
                     "/rosout",
@@ -346,6 +364,66 @@ class VisibilityCapture(Node):
         self.counts["raw_periodic_saved"] += 1
         self._manifest_record("raw_periodic", message, path, context)
 
+    def _depth_callback(self, message: Image) -> None:
+        """Cache bounded synchronized depth without publishing or deciding."""
+        self.counts["depth_messages"] += 1
+        stamp_ns = stamp_nanoseconds(message.header.stamp)
+        self.depth_cache[stamp_ns] = message
+        self.depth_cache.move_to_end(stamp_ns)
+        while len(self.depth_cache) > self.cache_limit:
+            self.depth_cache.popitem(last=False)
+
+    def _nearest_depth(self, stamp_ns: int):
+        if not self.depth_cache:
+            return None
+        nearest_stamp = min(
+            self.depth_cache,
+            key=lambda candidate: abs(candidate - stamp_ns),
+        )
+        if abs(nearest_stamp - stamp_ns) > 50_000_000:
+            return None
+        return self.depth_cache[nearest_stamp]
+
+    def _save_depth(self, message: Image, rgb_stamp_ns: int):
+        """Persist millimetre uint16 depth for offline diagnostics only."""
+        depth_stamp_ns = stamp_nanoseconds(message.header.stamp)
+        path = self.runtime_depth_dir / f"runtime_depth_{rgb_stamp_ns}.png"
+        try:
+            depth = self.bridge.imgmsg_to_cv2(
+                message, desired_encoding="passthrough"
+            )
+            depth_mm = np.zeros(depth.shape, dtype=np.uint16)
+            if np.issubdtype(depth.dtype, np.integer):
+                valid = (depth > 0) & (depth < np.iinfo(np.uint16).max)
+                depth_mm[valid] = depth[valid].astype(np.uint16)
+            else:
+                valid = np.isfinite(depth) & (depth > 0.0) & (depth < 65.535)
+                depth_mm[valid] = np.rint(depth[valid] * 1000.0).astype(
+                    np.uint16
+                )
+            ok = cv2.imwrite(
+                str(path), depth_mm, [cv2.IMWRITE_PNG_COMPRESSION, 1]
+            )
+        except (CvBridgeError, cv2.error, TypeError, ValueError):
+            ok = False
+        if not ok:
+            self.counts["image_write_failures"] += 1
+            return
+        self.counts["runtime_depth_saved"] += 1
+        record = {
+            "kind": "runtime_depth",
+            "stamp_ns": depth_stamp_ns,
+            "rgb_stamp_ns": rgb_stamp_ns,
+            "path": str(path.resolve()),
+            "width": message.width,
+            "height": message.height,
+            "encoding": "16UC1",
+            "source_encoding": message.encoding,
+            "depth_scale_m": 0.001,
+            "frame_id": message.header.frame_id,
+        }
+        self.manifest.write(json.dumps(record, separators=(",", ":")) + "\n")
+
     def _annotated_callback(self, message: Image) -> None:
         if not self.active:
             return
@@ -370,6 +448,11 @@ class VisibilityCapture(Node):
             return
         self.counts["runtime_raw_saved"] += 1
         self._manifest_record("runtime_raw", raw_message, raw_path, raw_context)
+        depth_message = self._nearest_depth(stamp_ns)
+        if depth_message is None:
+            self.counts["runtime_depth_missing"] += 1
+        else:
+            self._save_depth(depth_message, stamp_ns)
 
     def close(self) -> None:
         self._event("capture_stopped", active=self.active)

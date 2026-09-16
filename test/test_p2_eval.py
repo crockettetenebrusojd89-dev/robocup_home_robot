@@ -2,10 +2,13 @@
 """Regression tests for the isolated, deterministic P2 evaluation boundary."""
 
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+
+import numpy as np
 
 from p2_eval_core import EvaluationConfigError
 from p2_eval_core import generate_trial
@@ -29,6 +32,11 @@ from run_18_class_robustness_audit import suppress_cross_class_overlaps
 from run_banana_inference_repair_audit import same_class_nms
 from run_banana_inference_repair_audit import tile_windows
 from run_tabletop_robustness_gate import render_resource_failures
+from analyze_visibility import localize_box
+from analyze_visibility import median_bbox_depth
+from analyze_low_confidence_rescue import cluster_candidates
+from analyze_low_confidence_rescue import point_on_tabletop
+from analyze_low_confidence_rescue import score_clusters
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +46,67 @@ MANIFEST = PACKAGE_ROOT / "tools/formal_dataset/classes.json"
 
 
 class P2EvaluationTest(unittest.TestCase):
+    def test_tabletop_roi_uses_oriented_fixed_geometry(self):
+        tables = [
+            {
+                "table_id": "table",
+                "center_world_m": [1.0, 2.0],
+                "size_local_m": [0.5, 1.2],
+                "surface_z_world_m": 0.78,
+                "yaw_world_rad": math.pi / 2.0,
+            }
+        ]
+        self.assertEqual(point_on_tabletop([1.5, 2.0, 0.65], tables), "table")
+        self.assertIsNone(point_on_tabletop([1.0, 2.5, 0.65], tables))
+        self.assertIsNone(point_on_tabletop([1.5, 2.0, 0.2], tables))
+
+    def test_rescue_clustering_counts_distinct_frames(self):
+        candidates = [
+            {"stamp_ns": 1, "confidence": 0.2, "map_xyz": [0.0, 0.0, 0.7]},
+            {"stamp_ns": 1, "confidence": 0.1, "map_xyz": [0.01, 0.0, 0.7]},
+            {"stamp_ns": 2, "confidence": 0.2, "map_xyz": [0.02, 0.0, 0.7]},
+        ]
+        clusters = cluster_candidates(candidates, radius_m=0.1)
+        self.assertEqual(sorted(len(item["stamp_set"]) for item in clusters), [1, 2])
+
+    def test_rescue_scoring_penalizes_duplicate_cluster(self):
+        clusters = [
+            {"x": 0.02, "y": 0.0},
+            {"x": 0.04, "y": 0.0},
+            {"x": 2.0, "y": 2.0},
+        ]
+        score = score_clusters(clusters, [(0.0, 0.0)], match_threshold_m=0.1)
+        self.assertEqual((score["TP"], score["FP"], score["FN"]), (1, 2, 0))
+
+    def test_offline_depth_uses_runtime_central_bbox_semantics(self):
+        depth = np.full((20, 20), 2.0, dtype=np.float32)
+        depth[8:12, 8:12] = 1.25
+        result = median_bbox_depth(
+            depth,
+            {"bbox_xyxy": [5.0, 5.0, 15.0, 15.0]},
+        )
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["u"], 10.0)
+        self.assertAlmostEqual(result["v"], 10.0)
+        self.assertAlmostEqual(result["depth_m"], 1.25)
+
+    def test_offline_localization_applies_camera_to_map_transform(self):
+        depth = np.ones((20, 20), dtype=np.float32)
+        result = localize_box(
+            depth,
+            {"bbox_xyxy": [8.0, 8.0, 12.0, 12.0]},
+            {
+                "translation": {"x": 1.0, "y": 2.0, "z": 3.0},
+                "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+            },
+            {
+                "k": [10.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 0.0, 1.0]
+            },
+        )
+        self.assertTrue(result["depth_valid"])
+        self.assertTrue(result["map_valid"])
+        self.assertEqual(result["map_xyz"], [1.0, 2.0, 4.0])
+
     def test_banana_tiles_cover_frame_with_overlap(self):
         windows = tile_windows(640, 480, 0.20)
         self.assertEqual(len(windows), 4)
