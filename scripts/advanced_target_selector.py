@@ -12,7 +12,7 @@ from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
 from tf2_geometry_msgs import do_transform_pose_stamped
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -33,6 +33,7 @@ class AdvancedTargetSelector(Node):
         self.declare_parameter('target_image_evidence_path', '')
         self.declare_parameter('target_camera_topic', '/advanced/grasp_target_camera')
         self.declare_parameter('target_base_topic', '/advanced/grasp_target_base_link')
+        self.declare_parameter('target_class_topic', '/advanced/grasp_target_class')
         self.declare_parameter('selected_topic', '/advanced/target_selected')
         self.declare_parameter('activation_service', '/advanced/enable_target_selection')
         self.declare_parameter('minimum_confidence', 0.50)
@@ -69,6 +70,9 @@ class AdvancedTargetSelector(Node):
         )
         self.base_publisher = self.create_publisher(
             PoseStamped, str(self.get_parameter('target_base_topic').value), 1
+        )
+        self.class_publisher = self.create_publisher(
+            String, str(self.get_parameter('target_class_topic').value), 1
         )
         self.selected_publisher = self.create_publisher(
             Bool, str(self.get_parameter('selected_topic').value), 1
@@ -146,6 +150,7 @@ class AdvancedTargetSelector(Node):
         self.selected_publisher.publish(Bool(data=True))
 
     def _publish_target(self, selected, header, image_message):
+        self.class_publisher.publish(String(data=selected['class_name']))
         target_camera = PoseStamped()
         target_camera.header = header
         target_camera.pose.position = selected['point']

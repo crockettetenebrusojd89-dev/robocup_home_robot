@@ -4,7 +4,10 @@ import os
 from pathlib import Path
 import re
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import (
+    get_package_prefix,
+    get_package_share_directory,
+)
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -19,6 +22,7 @@ from launch.actions import (
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -107,6 +111,7 @@ def generate_launch_description():
     franka_share_parent = os.path.dirname(
         get_package_share_directory('franka_description')
     )
+    gz_control_lib = os.path.join(get_package_prefix('gz_ros2_control'), 'lib')
     nav2_params = os.path.join(robot_share, 'config', 'nav2_params.yaml')
     map_yaml = os.path.join(robot_share, 'maps', 'example_map_v1.yaml')
 
@@ -124,6 +129,8 @@ def generate_launch_description():
             'z': LaunchConfiguration('spawn_z'),
             'yaw': LaunchConfiguration('spawn_yaw'),
             'world_name': LaunchConfiguration('world_name'),
+            'arm_control': LaunchConfiguration('arm_control'),
+            'controller_config': LaunchConfiguration('controller_config'),
         }.items(),
     )
 
@@ -168,7 +175,14 @@ def generate_launch_description():
         executable='amcl',
         name='amcl',
         output='screen',
-        parameters=[nav2_params],
+        parameters=[
+            nav2_params,
+            {
+                'initial_pose.x': LaunchConfiguration('initial_pose_x'),
+                'initial_pose.y': LaunchConfiguration('initial_pose_y'),
+                'initial_pose.yaw': LaunchConfiguration('initial_pose_yaw'),
+            },
+        ],
     )
 
     controller_server = Node(
@@ -234,6 +248,7 @@ def generate_launch_description():
             os.path.join(robot_share, 'config', 'navigation.rviz'),
         ],
         parameters=[{'use_sim_time': True}],
+        condition=IfCondition(LaunchConfiguration('use_rviz')),
     )
 
     nav2_stack = [
@@ -272,6 +287,21 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument(
+            'arm_control',
+            default_value='false',
+            description='Opt in to Advanced Stage 2A FR3 control.',
+        ),
+        DeclareLaunchArgument(
+            'controller_config',
+            default_value='',
+            description='Absolute Stage 2A ros2_control controller YAML.',
+        ),
+        DeclareLaunchArgument(
+            'use_rviz',
+            default_value='true',
+            description='Keep the normal navigation visualization enabled.',
+        ),
+        DeclareLaunchArgument(
             'world_file',
             default_value='',
             description=(
@@ -304,9 +334,30 @@ def generate_launch_description():
             default_value='0.014066953117588583',
             description='Robot start yaw in Gazebo world coordinates.',
         ),
+        DeclareLaunchArgument('initial_pose_x', default_value='-4.828'),
+        DeclareLaunchArgument('initial_pose_y', default_value='-0.477'),
+        DeclareLaunchArgument('initial_pose_yaw', default_value='0.010'),
         # SDFormat resolves package://franka_description as a model:// URI.
         # Add the directory containing that package before starting Gazebo;
         # the upstream package exports its own share directory instead.
+        SetEnvironmentVariable(
+            'GZ_SIM_SYSTEM_PLUGIN_PATH',
+            [
+                gz_control_lib,
+                os.pathsep,
+                EnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH', default_value=''),
+            ],
+        ),
+        SetEnvironmentVariable(
+            'IGN_GAZEBO_SYSTEM_PLUGIN_PATH',
+            [
+                gz_control_lib,
+                os.pathsep,
+                EnvironmentVariable(
+                    'IGN_GAZEBO_SYSTEM_PLUGIN_PATH', default_value=''
+                ),
+            ],
+        ),
         SetEnvironmentVariable(
             'GZ_SIM_RESOURCE_PATH',
             [

@@ -3,6 +3,19 @@
   <!-- Official Franka description-only macro.  gazebo=false intentionally avoids
        legacy transmissions and all arm controllers in this integration stage. -->
   <xacro:include filename="$(find franka_description)/robots/common/franka_robot.xacro"/>
+  <xacro:include filename="$(find franka_hardware)/ros2_control/franka_arm.ros2_control.xacro"/>
+
+  <!-- Override only the interface-list helper consumed below so the active
+       simulation starts in the already validated navigation-stowed posture. -->
+  <xacro:macro name="configure_arm_joints" params="joint_prefix include_effort_command:=1">
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint1" initial_position="-0.68" include_effort_command="${include_effort_command}"/>
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint2" initial_position="0.29" include_effort_command="${include_effort_command}"/>
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint3" initial_position="-0.26" include_effort_command="${include_effort_command}"/>
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint4" initial_position="-2.91" include_effort_command="${include_effort_command}"/>
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint5" initial_position="0.75" include_effort_command="${include_effort_command}"/>
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint6" initial_position="1.03" include_effort_command="${include_effort_command}"/>
+    <xacro:configure_arm_joint joint_name="${joint_prefix}_joint7" initial_position="2.00" include_effort_command="${include_effort_command}"/>
+  </xacro:macro>
 
   <xacro:macro name="box_inertial" params="mass x y z">
     <inertial>
@@ -39,7 +52,7 @@
     </gazebo>
   </xacro:macro>
 
-  <xacro:macro name="mobile_manipulator_static">
+  <xacro:macro name="mobile_manipulator_static" params="arm_control:=false controller_config:=''">
     <material name="shell_white">
       <color rgba="0.88 0.90 0.94 1.0"/>
     </material>
@@ -238,7 +251,7 @@
       hand="true"
       ee_id="franka_hand"
       rpy_ee="0 0 ${-pi / 4.0}"
-      gazebo="false"
+      gazebo="${arm_control}"
       with_sc="false"
       no_prefix="false"
       arm_prefix=""
@@ -251,21 +264,42 @@
       <origin xyz="0 0 0.01" rpy="0 0 0"/>
     </joint>
 
-    <!-- V2 navigation_stowed (rad), validated against the official FR3 limits
-         and collision meshes.  Passive locks are display-only until the arm
-         receives its future ros2_control / MoveIt integration. -->
-    <xacro:passive_joint_lock joint="fr3_joint1" reference="-0.68" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint2" reference="0.29" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint3" reference="-0.26" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint4" reference="-2.91" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint5" reference="0.75" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint6" reference="1.03" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_joint7" reference="2.00" stiffness="7000.0"/>
-    <xacro:passive_joint_lock joint="fr3_finger_joint1" reference="0.0" stiffness="800.0"/>
-    <xacro:passive_joint_lock joint="fr3_finger_joint2" reference="0.0" stiffness="800.0"/>
+    <xacro:unless value="${arm_control}">
+      <!-- Frozen base-task path: keep the already validated passive stowed arm. -->
+      <xacro:passive_joint_lock joint="fr3_joint1" reference="-0.68" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_joint2" reference="0.29" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_joint3" reference="-0.26" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_joint4" reference="-2.91" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_joint5" reference="0.75" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_joint6" reference="1.03" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_joint7" reference="2.00" stiffness="7000.0"/>
+      <xacro:passive_joint_lock joint="fr3_finger_joint1" reference="0.0" stiffness="800.0"/>
+      <xacro:passive_joint_lock joint="fr3_finger_joint2" reference="0.0" stiffness="800.0"/>
+    </xacro:unless>
 
-    <!-- Publish actual Gazebo joint positions so robot_state_publisher exposes
-         the complete arm / hand TF chain without adding an arm controller. -->
+    <xacro:if value="${arm_control}">
+      <!-- Stage 2A opt-in path: reuse the controller-tested Franka Gazebo
+           hardware chain. The spawn generator replaces the upstream ready
+           initial values with the validated navigation-stowed values. -->
+      <xacro:franka_arm_ros2_control
+          robot_type="fr3"
+          include_effort_command="true"
+          include_finger_joint="true"
+          arm_prefix="">
+        <hardware_plugin>
+          <plugin>franka_gazebo_hardware/FrankaGazeboHardwareInterface</plugin>
+        </hardware_plugin>
+      </xacro:franka_arm_ros2_control>
+      <gazebo>
+        <plugin filename="gz_ros2_control-system"
+                name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+          <parameters>${controller_config}</parameters>
+        </plugin>
+      </gazebo>
+    </xacro:if>
+
+    <!-- Publish the complete mobile-base and arm state in both modes.  The ROS
+         relay applies stowed offsets only for the passive base-task path. -->
     <gazebo>
       <plugin filename="ignition-gazebo-joint-state-publisher-system"
               name="gz::sim::systems::JointStatePublisher">

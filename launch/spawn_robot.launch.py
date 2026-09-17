@@ -6,7 +6,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import Command, LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -28,8 +28,14 @@ def generate_launch_description():
         'generate_spawn_sdf.py',
     )
 
+    arm_control = LaunchConfiguration('arm_control')
+    controller_config = LaunchConfiguration('controller_config')
     robot_description = ParameterValue(
-        Command(['xacro ', xacro_file]),
+        Command([
+            'xacro ', xacro_file,
+            ' arm_control:=', arm_control,
+            ' controller_config:=', controller_config,
+        ]),
         value_type=str,
     )
 
@@ -48,7 +54,14 @@ def generate_launch_description():
         arguments=[
             '-world', LaunchConfiguration('world_name'),
             '-name', 'robocup_home_robot',
-            '-string', Command([spawn_sdf_generator, ' ', xacro_file]),
+            '-string', Command([
+                spawn_sdf_generator, ' ', xacro_file,
+                PythonExpression([
+                    "' --arm-control --controller-config '",
+                    " if '", arm_control, "' == 'true' else ''",
+                ]),
+                controller_config,
+            ]),
             '-x', LaunchConfiguration('x'),
             '-y', LaunchConfiguration('y'),
             '-z', LaunchConfiguration('z'),
@@ -86,6 +99,11 @@ def generate_launch_description():
         package='robocup_home_robot',
         executable='offset_joint_states',
         output='screen',
+        parameters=[{
+            'apply_stowed_offsets': PythonExpression([
+                "'", arm_control, "' != 'true'"
+            ]),
+        }],
     )
 
     load_sensors_system = ExecuteProcess(
@@ -106,6 +124,16 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'arm_control',
+            default_value='false',
+            description='Opt in to Stage 2A FR3 ros2_control integration.',
+        ),
+        DeclareLaunchArgument(
+            'controller_config',
+            default_value='',
+            description='Absolute ros2_control YAML used only with arm_control.',
+        ),
         DeclareLaunchArgument(
             'world_name',
             default_value='robocup_home',

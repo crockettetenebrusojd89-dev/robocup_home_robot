@@ -43,6 +43,7 @@ class AdvancedStage1Runner(Node):
             'dining_entry_yaw', DEFAULT_DINING_ENTRY_WAYPOINT[2]
         )
         self.declare_parameter('navigate_to_p2_first', False)
+        self.declare_parameter('skip_dining_navigation', False)
         self.declare_parameter('p2_x', 0.265)
         self.declare_parameter('p2_y', -0.665)
         self.declare_parameter('p2_yaw', -2.638)
@@ -98,6 +99,31 @@ class AdvancedStage1Runner(Node):
                 return True
         return False
 
+    def _already_at_pose(self, label, x, y, yaw):
+        deadline = time.monotonic() + 2.0
+        while rclpy.ok() and self._latest_amcl_pose is None:
+            if time.monotonic() >= deadline:
+                return False
+            rclpy.spin_once(self, timeout_sec=0.1)
+        if self._latest_amcl_pose is None:
+            return False
+        pose = self._latest_amcl_pose.pose.pose
+        xy_error = math.hypot(pose.position.x - x, pose.position.y - y)
+        current_yaw = 2.0 * math.atan2(
+            pose.orientation.z, pose.orientation.w
+        )
+        yaw_error = abs(math.atan2(
+            math.sin(current_yaw - yaw), math.cos(current_yaw - yaw)
+        ))
+        if xy_error > 0.15 or yaw_error > 0.15:
+            return False
+        self.get_logger().info(
+            f'Stage 1 {label} already satisfied by localization: '
+            f'xy_error={xy_error:.3f} m yaw_error={yaw_error:.3f} rad; '
+            'skipping zero-distance Nav2 goal.'
+        )
+        return True
+
     def _feedback_callback(self, label):
         """Log live distance without altering Nav2 control or recovery."""
         def callback(feedback_message):
@@ -112,11 +138,16 @@ class AdvancedStage1Runner(Node):
         return callback
 
     def _send_navigation_goal(self, label, x, y, yaw):
-        if not self._wait_for_action_server():
-            return 1
         if not all(math.isfinite(value) for value in (x, y, yaw)):
             self.get_logger().error(f'{label} pose must be finite.')
             return 1
+        if self._already_at_pose(label, x, y, yaw):
+            return 0
+        if not self._wait_for_action_server():
+            return 1
+        # DDS can expose the action endpoints just before bt_navigator finishes
+        # its lifecycle activation. Avoid sending into that short transition.
+        rclpy.spin_once(self, timeout_sec=1.0)
         goal = NavigateToPose.Goal()
         goal.pose.header.frame_id = 'map'
         goal.pose.header.stamp = self.get_clock().now().to_msg()
@@ -205,7 +236,12 @@ class AdvancedStage1Runner(Node):
                 float(self.get_parameter('p2_yaw').value),
             ) != 0:
                 return 1
-        if bool(self.get_parameter('use_dining_entry_waypoint').value):
+        skip_dining_navigation = bool(
+            self.get_parameter('skip_dining_navigation').value
+        )
+        if bool(self.get_parameter('use_dining_entry_waypoint').value) and not (
+            skip_dining_navigation
+        ):
             try:
                 entry_x, entry_y, entry_yaw = dining_entry_waypoint(
                     self.get_parameter('dining_entry_x').value,
@@ -227,13 +263,19 @@ class AdvancedStage1Runner(Node):
             observation_label = 'Leg 2 dining entry waypoint to observation pose'
         else:
             observation_label = 'dining observation pose'
-        if self._send_navigation_goal(
-            observation_label,
-            float(self.get_parameter('dining_observation_x').value),
-            float(self.get_parameter('dining_observation_y').value),
-            float(self.get_parameter('dining_observation_yaw').value),
-        ) != 0:
-            return 1
+        if not skip_dining_navigation:
+            if self._send_navigation_goal(
+                observation_label,
+                float(self.get_parameter('dining_observation_x').value),
+                float(self.get_parameter('dining_observation_y').value),
+                float(self.get_parameter('dining_observation_yaw').value),
+            ) != 0:
+                return 1
+        else:
+            self.get_logger().warning(
+                'Focused test: using the supplied manipulation-area spawn '
+                'instead of Stage 1 dining navigation.'
+            )
         if not self._enable_selector():
             return 1
         timeout = float(self.get_parameter('target_wait_seconds').value)

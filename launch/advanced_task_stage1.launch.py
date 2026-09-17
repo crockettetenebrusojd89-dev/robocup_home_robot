@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import signal
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -10,7 +11,8 @@ from launch.actions import DeclareLaunchArgument, EmitEvent, ExecuteProcess
 from launch.actions import IncludeLaunchDescription, LogInfo, RegisterEventHandler
 from launch.actions import TimerAction
 from launch.event_handlers import OnProcessExit
-from launch.events import Shutdown
+from launch.events import Shutdown, matches_action
+from launch.events.process import SignalProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -31,6 +33,15 @@ def generate_launch_description():
         launch_arguments={
             'world_file': LaunchConfiguration('world_file'),
             'world_name': LaunchConfiguration('world_name'),
+            'arm_control': LaunchConfiguration('arm_control'),
+            'controller_config': LaunchConfiguration('controller_config'),
+            'use_rviz': LaunchConfiguration('use_rviz'),
+            'spawn_x': LaunchConfiguration('spawn_x'),
+            'spawn_y': LaunchConfiguration('spawn_y'),
+            'spawn_yaw': LaunchConfiguration('spawn_yaw'),
+            'initial_pose_x': LaunchConfiguration('initial_pose_x'),
+            'initial_pose_y': LaunchConfiguration('initial_pose_y'),
+            'initial_pose_yaw': LaunchConfiguration('initial_pose_yaw'),
         }.items(),
     )
     wait_for_vision = ExecuteProcess(
@@ -97,6 +108,9 @@ def generate_launch_description():
             'navigate_to_p2_first': LaunchConfiguration(
                 'standalone_navigate_to_p2'
             ),
+            'skip_dining_navigation': LaunchConfiguration(
+                'skip_dining_navigation'
+            ),
         }],
     )
 
@@ -119,18 +133,47 @@ def generate_launch_description():
             runner,
         ]
 
-    def finish_stage1(event, _context):
+    def finish_stage1(event, context):
         message = (
             'Advanced Task Stage 1 succeeded.'
             if event.returncode == 0
             else f'Advanced Task Stage 1 failed; runner exit code {event.returncode}.'
         )
-        return [
-            LogInfo(msg=message),
-            EmitEvent(event=Shutdown(reason=message)),
-        ]
+        if event.returncode == 0 and (
+            LaunchConfiguration('shutdown_on_success').perform(context).lower()
+            == 'false'
+        ):
+            return [
+                LogInfo(
+                    msg=(
+                        message + ' Releasing one-shot YOLO resources and '
+                        'continuing to Stage 2A.'
+                    )
+                ),
+                EmitEvent(
+                    event=SignalProcess(
+                        signal_number=signal.SIGINT,
+                        process_matcher=matches_action(localizer),
+                    )
+                ),
+            ]
+        return [LogInfo(msg=message), EmitEvent(event=Shutdown(reason=message))]
 
     return LaunchDescription([
+        DeclareLaunchArgument('arm_control', default_value='false'),
+        DeclareLaunchArgument('controller_config', default_value=''),
+        DeclareLaunchArgument('use_rviz', default_value='true'),
+        DeclareLaunchArgument('spawn_x', default_value='-4.8523360944520624'),
+        DeclareLaunchArgument('spawn_y', default_value='-0.53251986452829558'),
+        DeclareLaunchArgument('spawn_yaw', default_value='0.014066953117588583'),
+        DeclareLaunchArgument('initial_pose_x', default_value='-4.828'),
+        DeclareLaunchArgument('initial_pose_y', default_value='-0.477'),
+        DeclareLaunchArgument('initial_pose_yaw', default_value='0.010'),
+        DeclareLaunchArgument(
+            'shutdown_on_success',
+            default_value='true',
+            description='Stage 2A sets false so manipulation can continue.',
+        ),
         DeclareLaunchArgument('world_file', default_value=''),
         DeclareLaunchArgument('world_name', default_value='robocup_home'),
         DeclareLaunchArgument(
@@ -171,6 +214,7 @@ def generate_launch_description():
                 'started after the base task has already reached P2.'
             ),
         ),
+        DeclareLaunchArgument('skip_dining_navigation', default_value='false'),
         DeclareLaunchArgument(
             'stage_timeout_seconds',
             default_value='300.0',

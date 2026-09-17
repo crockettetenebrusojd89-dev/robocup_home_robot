@@ -7,6 +7,35 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(shape_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+
+add_executable(advanced_stage2a_pregrasp src/advanced_stage2a_pregrasp.cpp)
+ament_target_dependencies(
+  advanced_stage2a_pregrasp
+  geometry_msgs
+  moveit_ros_planning_interface
+  moveit_msgs
+  rclcpp
+  rclcpp_action
+  control_msgs
+  shape_msgs
+  std_msgs
+  tf2
+  tf2_geometry_msgs
+  tf2_ros
+)
+
+install(TARGETS advanced_stage2a_pregrasp DESTINATION lib/${PROJECT_NAME})
 
 install(
   DIRECTORY urdf
@@ -116,6 +145,7 @@ install(
     scripts/advanced_dining_navigation.py
     scripts/scan_living_room.py
     scripts/advanced_target_selection.py
+    scripts/advanced_pregrasp_geometry.py
     scripts/vision_final_dedup.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -129,6 +159,11 @@ install(
   PROGRAMS scripts/offset_joint_states.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME offset_joint_states
+)
+
+install(
+  PROGRAMS scripts/advanced_stage2a_approach.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
@@ -186,6 +221,21 @@ if(BUILD_TESTING)
     p2_evaluation
     PROPERTIES ENVIRONMENT
       "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/tools/p2_eval"
+  )
+  add_test(
+    NAME advanced_pregrasp_geometry
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_advanced_pregrasp_geometry.py
+  )
+  set_tests_properties(
+    advanced_pregrasp_geometry
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+  )
+  add_test(
+    NAME advanced_fr3_frames
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_advanced_fr3_frames.py
   )
   add_test(
     NAME advanced_target_selector

@@ -8,6 +8,17 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 
+STOWED_JOINTS = {
+    'fr3_joint1': -0.68,
+    'fr3_joint2': 0.29,
+    'fr3_joint3': -0.26,
+    'fr3_joint4': -2.91,
+    'fr3_joint5': 0.75,
+    'fr3_joint6': 1.03,
+    'fr3_joint7': 2.00,
+}
+
+
 def _run(command):
     return subprocess.run(
         command,
@@ -79,12 +90,40 @@ def _seed_child_pose(joint, child_link, reference):
         upper.text = str(float(upper.text) - position)
 
 
-def generate_spawn_sdf(xacro_path):
+def _set_control_initial_positions(urdf_root):
+    updated = set()
+    for joint in urdf_root.findall('./ros2_control/joint'):
+        name = joint.get('name', '')
+        if name not in STOWED_JOINTS:
+            continue
+        initial = joint.find(
+            "state_interface[@name='position']/param[@name='initial_value']"
+        )
+        if initial is None:
+            raise RuntimeError(
+                f'ros2_control joint {name} has no position initial_value'
+            )
+        initial.text = str(STOWED_JOINTS[name])
+        updated.add(name)
+    missing = sorted(set(STOWED_JOINTS) - updated)
+    if missing:
+        raise RuntimeError('Missing controlled FR3 joints: ' + ', '.join(missing))
+
+
+def generate_spawn_sdf(xacro_path, arm_control=False, controller_config=''):
     """Return SDF whose initial link poses match the passive references."""
-    urdf_text = _run(['xacro', xacro_path])
+    command = ['xacro', xacro_path]
+    if arm_control:
+        command.extend([
+            'arm_control:=true',
+            f'controller_config:={controller_config}',
+        ])
+    urdf_text = _run(command)
     urdf_root = ET.fromstring(urdf_text)
+    if arm_control:
+        _set_control_initial_positions(urdf_root)
     references = _passive_references(urdf_root)
-    if not references:
+    if not references and not arm_control:
         raise RuntimeError('No FR3 passive joint references were found in the Xacro')
 
     with tempfile.NamedTemporaryFile(suffix='.urdf') as urdf_file:
@@ -125,9 +164,17 @@ def generate_spawn_sdf(xacro_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('xacro_file')
+    parser.add_argument('--arm-control', action='store_true')
+    parser.add_argument('--controller-config', default='')
     args = parser.parse_args()
     try:
-        sys.stdout.write(generate_spawn_sdf(args.xacro_file))
+        if args.arm_control and not args.controller_config:
+            raise RuntimeError('--controller-config is required with --arm-control')
+        sys.stdout.write(generate_spawn_sdf(
+            args.xacro_file,
+            arm_control=args.arm_control,
+            controller_config=args.controller_config,
+        ))
     except (OSError, ET.ParseError, subprocess.CalledProcessError, RuntimeError) as exc:
         print(f'Failed to generate spawn SDF: {exc}', file=sys.stderr)
         return 1

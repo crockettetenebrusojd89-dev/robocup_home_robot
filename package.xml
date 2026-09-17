@@ -19,6 +19,15 @@
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>moveit_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>control_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>shape_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2</depend>
   <exec_depend>franka_description</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>nav2_amcl</exec_depend>

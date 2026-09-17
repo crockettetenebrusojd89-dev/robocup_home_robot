@@ -38,7 +38,12 @@ class OffsetJointStates(Node):
 
     def __init__(self):
         super().__init__('offset_joint_states')
-        self._offsets = _stowed_offsets()
+        self.declare_parameter('apply_stowed_offsets', True)
+        self._offsets = (
+            _stowed_offsets()
+            if bool(self.get_parameter('apply_stowed_offsets').value)
+            else {}
+        )
         self._publisher = self.create_publisher(JointState, '/joint_states', 10)
         self.create_subscription(
             JointState,
@@ -47,7 +52,8 @@ class OffsetJointStates(Node):
             10,
         )
         self.get_logger().info(
-            f'Restoring URDF angles for {len(self._offsets)} FR3 joints'
+            f'Relaying complete Gazebo joint state; restoring offsets for '
+            f'{len(self._offsets)} FR3 joints'
         )
 
     def _relay(self, message):
