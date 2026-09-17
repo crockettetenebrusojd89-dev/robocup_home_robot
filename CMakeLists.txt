@@ -46,6 +46,7 @@ install(
     scripts/wait_for_gazebo_world.py
     scripts/wait_for_gazebo_robot.py
     scripts/wait_for_vision_ready.py
+    scripts/generate_advanced_stage1_dining_world.py
     scripts/save_map.sh
   DESTINATION share/${PROJECT_NAME}/lib/${PROJECT_NAME}
 )
@@ -54,6 +55,12 @@ install(
   PROGRAMS scripts/go_to_living_room.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME go_to_living_room
+)
+
+install(
+  PROGRAMS scripts/go_to_dining_table.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME go_to_dining_table
 )
 
 install(
@@ -93,12 +100,22 @@ install(
 )
 
 install(
+  PROGRAMS
+    scripts/advanced_target_selector.py
+    scripts/advanced_stage1_runner.py
+    scripts/advanced_target_image_saver.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
   FILES
     scripts/formal_base_task_runner.py
     scripts/formal_runtime_config.py
     scripts/go_to_living_room.py
     scripts/p2_viewpoint_plan.py
+    scripts/advanced_dining_navigation.py
     scripts/scan_living_room.py
+    scripts/advanced_target_selection.py
     scripts/vision_final_dedup.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -169,6 +186,26 @@ if(BUILD_TESTING)
     p2_evaluation
     PROPERTIES ENVIRONMENT
       "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/tools/p2_eval"
+  )
+  add_test(
+    NAME advanced_target_selector
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_advanced_target_selector.py
+  )
+  set_tests_properties(
+    advanced_target_selector
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+  )
+  add_test(
+    NAME advanced_dining_navigation
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_advanced_dining_navigation.py
+  )
+  set_tests_properties(
+    advanced_dining_navigation
+    PROPERTIES ENVIRONMENT
+      "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts"
   )
 endif()
 

@@ -32,6 +32,8 @@ from std_srvs.srv import Trigger
 from tf2_geometry_msgs import do_transform_point
 from tf2_ros import Buffer, TransformException, TransformListener
 from ultralytics import YOLO
+from vision_msgs.msg import Detection2D, Detection2DArray
+from vision_msgs.msg import ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker, MarkerArray
 from vision_final_dedup import final_deduplicate_clusters
 from vision_final_dedup import partition_by_minimum_observations
@@ -107,6 +109,7 @@ class RgbdObjectLocalizer(Node):
         self.declare_parameter('depth_topic', '/camera/depth/image_raw')
         self.declare_parameter('camera_info_topic', '/camera/camera_info')
         self.declare_parameter('output_image_topic', '/vision/detections_image')
+        self.declare_parameter('localized_detection_topic', '')
         self.declare_parameter('marker_topic', '/vision/object_markers')
         self.declare_parameter(
             'deduplicated_marker_topic',
@@ -134,7 +137,7 @@ class RgbdObjectLocalizer(Node):
         self.declare_parameter('target_classes', ['apple', 'coke_can'])
         self.declare_parameter(
             'expected_model_classes',
-            Parameter.Type.STRING_ARRAY,
+            [],
         )
         self.declare_parameter('group_number', -1)
         self.declare_parameter(
@@ -153,6 +156,9 @@ class RgbdObjectLocalizer(Node):
         )
         self.output_image_topic = str(
             self.get_parameter('output_image_topic').value
+        )
+        self.localized_detection_topic = str(
+            self.get_parameter('localized_detection_topic').value
         )
         self.marker_topic = str(self.get_parameter('marker_topic').value)
         self.deduplicated_marker_topic = str(
@@ -244,6 +250,13 @@ class RgbdObjectLocalizer(Node):
         self.image_publisher = self.create_publisher(
             Image, self.output_image_topic, sensor_qos
         )
+        self.localized_detection_publisher = None
+        if self.localized_detection_topic:
+            self.localized_detection_publisher = self.create_publisher(
+                Detection2DArray,
+                self.localized_detection_topic,
+                sensor_qos,
+            )
         self.marker_publisher = self.create_publisher(
             MarkerArray, self.marker_topic, 10
         )
@@ -323,6 +336,8 @@ class RgbdObjectLocalizer(Node):
             f'min_confirmations={self.min_confirmations}; '
             f'final_min_confirmations={self.final_min_confirmations}; '
             f'target_classes={list(self.target_classes)}; '
+            f'localized_detection_topic='
+            f'{self.localized_detection_topic or "disabled"}; '
             f'group_number={self.group_number}; '
             f'answer_output_dir={self.answer_output_dir}; '
             'save_service=/vision/save_answer; '
@@ -633,6 +648,32 @@ class RgbdObjectLocalizer(Node):
             1,
             cv2.LINE_AA,
         )
+
+    def _publish_localized_detections(self, localizations, header):
+        """Publish optional structured detections without affecting scoring."""
+        if self.localized_detection_publisher is None:
+            return
+
+        message = Detection2DArray()
+        message.header = header
+        for localized in localizations:
+            x1, y1, x2, y2 = localized['bbox']
+            detection = Detection2D()
+            detection.header = header
+            detection.id = localized['class_name']
+            detection.bbox.center.position.x = (x1 + x2) * 0.5
+            detection.bbox.center.position.y = (y1 + y2) * 0.5
+            detection.bbox.size_x = x2 - x1
+            detection.bbox.size_y = y2 - y1
+
+            hypothesis = ObjectHypothesisWithPose()
+            hypothesis.hypothesis.class_id = localized['class_name']
+            hypothesis.hypothesis.score = localized['confidence']
+            hypothesis.pose.pose.position = localized['camera'].point
+            hypothesis.pose.pose.orientation.w = 1.0
+            detection.results.append(hypothesis)
+            message.detections.append(detection)
+        self.localized_detection_publisher.publish(message)
 
     def _make_markers(self, localizations, stamp):
         messages = []
@@ -1229,6 +1270,7 @@ class RgbdObjectLocalizer(Node):
                     localized = {
                         'class_name': class_name,
                         'confidence': confidence,
+                        'bbox': detection[2:],
                         'u': u,
                         'v': v,
                         'depth': depth,
@@ -1250,6 +1292,10 @@ class RgbdObjectLocalizer(Node):
         else:
             output_message.header = rgb_message.header
             self.image_publisher.publish(output_message)
+
+        self._publish_localized_detections(
+            localizations, rgb_message.header
+        )
 
         self.marker_publisher.publish(
             self._make_markers(localizations, rgb_message.header.stamp)

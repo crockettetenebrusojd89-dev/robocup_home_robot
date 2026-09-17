@@ -7,6 +7,7 @@ from io import StringIO
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,10 @@ navigation = load_module('navigation_launch', 'launch/navigation.launch.py')
 world_wait = load_module(
     'wait_for_gazebo_world',
     'scripts/wait_for_gazebo_world.py',
+)
+stage1_world = load_module(
+    'generate_advanced_stage1_dining_world',
+    'scripts/generate_advanced_stage1_dining_world.py',
 )
 sensors = load_module(
     'load_sensors_system',
@@ -88,6 +93,35 @@ class TestFormalWorldLoader(unittest.TestCase):
                 world_wait.parse_arguments(['--world-name', '../unsafe'])
             with self.assertRaises(SystemExit):
                 sensors.parse_arguments(['--world-name', 'two words'])
+
+    def test_stage1_dining_world_replaces_formal_items_with_four_objects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'example.world'
+            output = Path(directory) / 'stage1.world'
+            source.write_text(
+                '<sdf version="1.6"><world name="robocup_home">'
+                '<include><uri>model://bowl</uri></include>'
+                '<include><uri>model://not_a_formal_object</uri></include>'
+                '</world></sdf>',
+                encoding='utf-8',
+            )
+
+            metadata = stage1_world.create_dining_world(source, output)
+            world = ET.parse(output).getroot().find('world')
+            uris = [entry.findtext('uri') for entry in world.findall('include')]
+
+            self.assertTrue(output.is_file())
+            self.assertEqual(len(metadata['objects']), 4)
+            self.assertEqual(
+                uris,
+                [
+                    'model://not_a_formal_object',
+                    'model://apple',
+                    'model://coke_can',
+                    'model://mustard_bottle',
+                    'model://master_chef_can',
+                ],
+            )
 
 
 if __name__ == '__main__':
